@@ -1,9 +1,9 @@
 {
 	"required": true,
-	"package": "com.example.mixin.client",
+	"package": "blue.endless.minesweeper.mixin",
 	"compatibilityLevel": "JAVA_17",
-	"client": [
-		"ExampleClientMixin"
+	"mixins": [
+		"ServerOverride"
 	],
 	"injectors": {
 		"defaultRequire": 1

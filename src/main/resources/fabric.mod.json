@@ -1,31 +1,29 @@
 {
 	"schemaVersion": 1,
-	"id": "modid",
+	"id": "minesweeper",
 	"version": "${version}",
-	"name": "Example mod",
-	"description": "This is an example description! Tell everyone what your mod is about!",
+	"name": "Minesweeper",
+	"description": "Causes the game to boot a multiplayer Minesweeper instead of Minecraft.",
 	"authors": [
-		"Me!"
+		"Falkreon"
 	],
 	"contact": {
-		"homepage": "https://fabricmc.net/",
-		"sources": "https://github.com/FabricMC/fabric-example-mod"
+		"homepage": "https://github.com/falkreon/Minesweeper",
+		"sources": "https://github.com/falkreon/Minesweeper",
+		"issues": "https://github.com/falkreon/Minesweeper/issues"
 	},
-	"license": "CC0-1.0",
-	"icon": "assets/modid/icon.png",
+	"license": "MIT",
+	"icon": "assets/minesweeper/icon.png",
 	"environment": "*",
 	"entrypoints": {
 		"main": [
-			"com.example.ExampleMod"
-		],
-		"client": [
-			"com.example.ExampleModClient"
+			"blue.endless.minesweeper.Minesweeper"
 		]
 	},
 	"mixins": [
-		"modid.mixins.json",
+		"minesweeper.mixins.json",
 		{
-			"config": "modid.client.mixins.json",
+			"config": "minesweeper.client.mixins.json",
 			"environment": "client"
 		}
 	],
@@ -34,8 +32,5 @@
 		"minecraft": "~1.20.4",
 		"java": ">=17",
 		"fabric-api": "*"
-	},
-	"suggests": {
-		"another-mod": "*"
 	}
 }
