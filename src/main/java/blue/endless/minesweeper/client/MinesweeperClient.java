@@ -11,6 +11,11 @@ public class MinesweeperClient {
 			//Minesweeper.LOGGER.info(".");
 			gameWindow.clear(0.5f, (float) Math.random() * 0.5f + 0.5f, 1.0f, 0.0f);
 			
+			gameWindow.bindPainterShader();
+			
+			Painter g = gameWindow.getPainter();
+			g.rect(-0.5f, -0.5f, 0.5f, 0.5f, new RGBColor(0xFFFF00));
+			
 			gameWindow.swapBuffers();
 			try {
 				Thread.sleep(10L);
@@ -21,5 +26,6 @@ public class MinesweeperClient {
 		}
 		
 		gameWindow.setVisible(false);
+		gameWindow.delete();
 	}
 }

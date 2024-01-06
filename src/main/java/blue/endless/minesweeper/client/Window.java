@@ -3,13 +3,19 @@ package blue.endless.minesweeper.client;
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.glfw.GLFWErrorCallback;
 import org.lwjgl.opengl.GL;
-import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL32;
+import org.lwjgl.opengl.GLDebugMessageCallbackI;
+import org.lwjgl.opengl.KHRDebug;
+import org.lwjgl.system.MemoryUtil;
 
 import blue.endless.minesweeper.Minesweeper;
 
 public class Window {
-	private long handle;
+	private GLFWErrorCallback glfwErrorCallback;
+	private GLDebugMessageCallbackI khrErrorCallback;
+	private final long handle;
+	private final ShaderProgram shader;
+	private final Painter painter;
 	private int width = 854;
 	private int height = 480;
 	private String title;
@@ -20,7 +26,8 @@ public class Window {
 	
 	public Window(String title) {
 		GLFW.glfwInit();
-		GLFW.glfwSetErrorCallback(GLFWErrorCallback.createPrint());
+		glfwErrorCallback = GLFWErrorCallback.createPrint();
+		GLFW.glfwSetErrorCallback(glfwErrorCallback);
 		
 		GLFW.glfwDefaultWindowHints();
 		GLFW.glfwWindowHint(GLFW.GLFW_STENCIL_BITS, 8);
@@ -37,15 +44,19 @@ public class Window {
 		GLFW.glfwMakeContextCurrent(this.handle);
 		GL.createCapabilities();
 		
+		installErrorCallback();
+		
 		GLFW.glfwSetFramebufferSizeCallback(this.handle, this::framebufferSizeCallback);
 		GLFW.glfwSetWindowPosCallback(this.handle, this::windowPosCallback);
 		GLFW.glfwSetWindowSizeCallback(this.handle, this::windowSizeCallback);
 		GLFW.glfwSetWindowFocusCallback(this.handle, this::windowFocusCallback);
 		GLFW.glfwSetCursorEnterCallback(this.handle, this::cursorEnterCallback);
 		
-		int[] stencilBits = {0};
-		GL32.glGetFramebufferAttachmentParameteriv(GL32.GL_DRAW_BUFFER, GL32.GL_STENCIL, GL32.GL_FRAMEBUFFER_ATTACHMENT_STENCIL_SIZE, stencilBits);
-		Minesweeper.LOGGER.info("Stencil bits obtained: " + stencilBits[0]);
+		shader = Painter.createShader();
+		painter = new Painter(this);
+		
+		Minesweeper.LOGGER.info(GL32.glGetString(GL32.GL_VERSION));
+		Minesweeper.LOGGER.info("Stencil bits obtained: " + GL32.glGetInteger(GL32.GL_STENCIL_BITS));
 	}
 	
 	public long getHandle() {
@@ -93,9 +104,17 @@ public class Window {
 		return GLFW.glfwWindowShouldClose(handle);
 	}
 	
+	public void bindPainterShader() {
+		shader.use();
+	}
+	
+	public Painter getPainter() {
+		return this.painter;
+	}
+	
 	public void clear(float r, float g, float b, float a) {
-		GL11.glClearColor(r, g, b, a);
-		GL11.glClear(GL11.GL_DEPTH_BUFFER_BIT | GL11.GL_COLOR_BUFFER_BIT);
+		GL32.glClearColor(r, g, b, a);
+		GL32.glClear(GL32.GL_DEPTH_BUFFER_BIT | GL32.GL_COLOR_BUFFER_BIT);
 	}
 	
 	public void swapBuffers() {
@@ -104,5 +123,28 @@ public class Window {
 		
 		//In case we load this method up with more stuff, better to be very responsive
 		GLFW.glfwPollEvents();
+	}
+	
+	public void installErrorCallback() {
+		if (GL.getCapabilities().GL_KHR_debug) {
+			GL32.glEnable(KHRDebug.GL_DEBUG_OUTPUT);
+			GL32.glEnable(KHRDebug.GL_DEBUG_OUTPUT_SYNCHRONOUS);
+			
+			khrErrorCallback = (sourceId, typeId, id, severity, length, messagePtr, userParam) -> {
+				String message = MemoryUtil.memASCII(messagePtr);
+				
+				if (typeId == KHRDebug.GL_DEBUG_TYPE_ERROR) {
+					Minesweeper.LOGGER.error(message);
+				} else {
+					Minesweeper.LOGGER.info(message);
+				}
+			};
+			KHRDebug.glDebugMessageCallback(khrErrorCallback, MemoryUtil.NULL);
+		}
+	}
+	
+	public void delete() {
+		GLFW.glfwDestroyWindow(handle);
+		
 	}
 }
