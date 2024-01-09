@@ -17,7 +17,6 @@
 	"environment": "*",
 	"entrypoints": {
 		"main": [
-			"blue.endless.minesweeper.Minesweeper"
 		]
 	},
 	"mixins": [

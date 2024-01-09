@@ -9,13 +9,14 @@ import org.lwjgl.opengl.KHRDebug;
 import org.lwjgl.system.MemoryUtil;
 
 import blue.endless.minesweeper.Minesweeper;
+import com.playsawdust.glow.render.Painter;
 
 public class Window {
 	private GLFWErrorCallback glfwErrorCallback;
 	private GLDebugMessageCallbackI khrErrorCallback;
 	private final long handle;
-	private final ShaderProgram shader;
-	private final Painter painter;
+	//private final Painter painter;
+	private final WindowPainter painter;
 	private int width = 854;
 	private int height = 480;
 	private String title;
@@ -52,8 +53,14 @@ public class Window {
 		GLFW.glfwSetWindowFocusCallback(this.handle, this::windowFocusCallback);
 		GLFW.glfwSetCursorEnterCallback(this.handle, this::cursorEnterCallback);
 		
-		shader = Painter.createShader();
-		painter = new Painter(this);
+		//painter = new Painter(this);
+		painter = new WindowPainter(this);
+		
+		int[] viewportDimensions = new int[4];
+		GL32.glGetIntegerv(GL32.GL_VIEWPORT, viewportDimensions);
+		this.width = viewportDimensions[2];
+		this.height = viewportDimensions[3];
+		
 		
 		Minesweeper.LOGGER.info(GL32.glGetString(GL32.GL_VERSION));
 		Minesweeper.LOGGER.info("Stencil bits obtained: " + GL32.glGetInteger(GL32.GL_STENCIL_BITS));
@@ -81,7 +88,10 @@ public class Window {
 	}
 	
 	private void framebufferSizeCallback(long handle, int width, int height) {
-		
+		System.out.println("Framebuffer size changed to "+width+"x"+height);
+		this.width = width;
+		this.height = height;
+		GL32.glViewport(0, 0, width, height);
 	}
 	
 	private void windowPosCallback(long handle, int x, int y) {
@@ -104,8 +114,9 @@ public class Window {
 		return GLFW.glfwWindowShouldClose(handle);
 	}
 	
-	public void bindPainterShader() {
-		shader.use();
+	public Painter startDrawing() {
+		painter.startDrawing();
+		return painter;
 	}
 	
 	public Painter getPainter() {
@@ -146,5 +157,13 @@ public class Window {
 	public void delete() {
 		GLFW.glfwDestroyWindow(handle);
 		
+	}
+
+	public int getWidth() {
+		return this.width;
+	}
+	
+	public int getHeight() {
+		return this.height;
 	}
 }
