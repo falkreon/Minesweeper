@@ -1,4 +1,4 @@
-package blue.endless.minesweeper.client;
+package com.playsawdust.glow.gl;
 
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.glfw.GLFWErrorCallback;
@@ -9,6 +9,7 @@ import org.lwjgl.opengl.KHRDebug;
 import org.lwjgl.system.MemoryUtil;
 
 import blue.endless.minesweeper.Minesweeper;
+
 import com.playsawdust.glow.render.Painter;
 
 public class Window {
@@ -88,11 +89,14 @@ public class Window {
 	}
 	
 	private void framebufferSizeCallback(long handle, int width, int height) {
-		System.out.println("Framebuffer size changed to "+width+"x"+height);
 		this.width = width;
 		this.height = height;
 		GL32.glViewport(0, 0, width, height);
 	}
+	
+	//private ImageData createCompatibleImage(ImageData input) {
+		
+	//}
 	
 	private void windowPosCallback(long handle, int x, int y) {
 		
@@ -126,6 +130,10 @@ public class Window {
 	public void clear(float r, float g, float b, float a) {
 		GL32.glClearColor(r, g, b, a);
 		GL32.glClear(GL32.GL_DEPTH_BUFFER_BIT | GL32.GL_COLOR_BUFFER_BIT);
+	}
+	
+	public void poll() {
+		GLFW.glfwPollEvents();
 	}
 	
 	public void swapBuffers() {

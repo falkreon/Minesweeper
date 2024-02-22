@@ -11,10 +11,11 @@ base {
 }
 
 repositories {
-	maven {
-		name = "Jitpack"
-		url 'https://jitpack.io'
-	}
+	mavenLocal();
+	//maven {
+	//	name = "Jitpack"
+	//	url 'https://jitpack.io'
+	//}
 }
 
 loom {
@@ -30,9 +31,8 @@ dependencies {
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
 	mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
 	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
-	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 	
-	modImplementation "com.github.playsawdust:glow-base:main-SNAPSHOT"
+	modImplementation "com.playsawdust.glow:glow-base:0.0.1"
 }
 
 processResources {

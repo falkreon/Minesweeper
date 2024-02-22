@@ -1,4 +1,4 @@
-package blue.endless.minesweeper.client;
+package com.playsawdust.glow.gl;
 
 import java.nio.ByteBuffer;
 
@@ -7,6 +7,8 @@ import org.lwjgl.opengl.GL32;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 
+import com.playsawdust.glow.image.color.Colors;
+import com.playsawdust.glow.image.color.RGBColor;
 import com.playsawdust.glow.vecmath.Matrix4;
 
 import blue.endless.minesweeper.Minesweeper;
@@ -99,6 +101,12 @@ public class ShaderProgram {
 		}
 	}
 	
+	public void set(String str, int value) {
+		if (uniforms.containsKey(str)) {
+			GL32.glUniform1i(uniforms.getInt(str), value);
+		}
+	}
+	
 	public void set(String str, float value) {
 		if (uniforms.containsKey(str)) {
 			GL32.glUniform1f(uniforms.getInt(str), value);
@@ -113,7 +121,11 @@ public class ShaderProgram {
 	
 	public void set(String str, RGBColor value) {
 		if (uniforms.containsKey(str)) {
-			GL32.glUniform4f(uniforms.getInt(str), value.gammaR(), value.gammaG(), value.gammaB(), value.alpha());
+			GL32.glUniform4f(uniforms.getInt(str),
+				(float) Colors.linearElementToGamma(value.r()),
+				(float) Colors.linearElementToGamma(value.g()),
+				(float) Colors.linearElementToGamma(value.b()),
+				value.alpha());
 		}
 	}
 	

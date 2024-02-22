@@ -1,4 +1,4 @@
-package blue.endless.minesweeper.client;
+package com.playsawdust.glow.gl;
 
 import org.lwjgl.opengl.GL32;
 import org.lwjgl.opengl.GL41;
