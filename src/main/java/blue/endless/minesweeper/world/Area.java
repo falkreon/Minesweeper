@@ -6,11 +6,9 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.stream.Stream;
 
-import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 
 public class Area {
-	private record Vector2i(int x, int y) {};
 	
 	private Tile baseBackgroundTile = new Tile();
 	private Tile baseForegroundTile = new Tile();
@@ -21,10 +19,9 @@ public class Area {
 	private AreaGenerator generator;
 	
 	/**
-	 * In the future, Area will disambiguate to several IntTables, one per 1024x1024 "patch"
+	 * In the future, Area will disambiguate to several Patches, one per 1024x1024 "patch"
 	 */
-	private IntTable foreground;
-	private IntTable background;
+	private Patch patch;
 	
 	public Area() {
 		baseForegroundTile.setForeground(true);
@@ -33,8 +30,7 @@ public class Area {
 		tileset.put(0, baseBackgroundTile);
 		tileset.put(1, baseForegroundTile);
 		
-		background = new IntTable(1024, 1024);
-		foreground = new IntTable(1024, 1024);
+		patch = new Patch(1024, 1024);
 	}
 	
 	public Tile getMissingTile() {
@@ -59,29 +55,32 @@ public class Area {
 	}
 	
 	public OptionalInt getId(Tile tile) {
-		Optional<Int2ObjectMap.Entry<Tile>> opt = tileset.int2ObjectEntrySet().stream()
+		return tileset.int2ObjectEntrySet().stream()
 			.filter(it -> it.getValue() == tile)
+			.mapToInt(it -> it.getIntKey())
 			.findFirst();
-		
-		//No good way to skip Optional<Integer> and go straight to OptionalInt
-		if (opt.isPresent()) return OptionalInt.of(opt.get().getIntKey());
-		return OptionalInt.empty();
 	}
 	
 	//FIXME: THIS IS TEMPORARY
 	public void generate() {
-		generator.generate(this, background, foreground, 0, 0);
+		generator.generate(this, patch, 0, 0);
+	}
+	
+	public Optional<Tile> getForegroundTile(int x, int y) {
+		OptionalInt rawId = patch.foreground(x, y);
+		if (rawId.isEmpty()) return Optional.empty();
+		return Optional.of(tileset.getOrDefault(rawId.getAsInt(), missingTile));
 	}
 	
 	public Tile getBackgroundTile(int x, int y) {
-		int i = background.getTile(x, y);
-		if (i<0) return baseForegroundTile;
-		return tileset.getOrDefault(i, missingTile);
+		int rawTile = patch.background(x, y);
+		if (rawTile < 0) return baseForegroundTile;
+		return tileset.getOrDefault(rawTile, missingTile);
 	}
 	
 	public void setTileEntity(int x, int y, TileEntity entity) {
 		Vector2i pos = new Vector2i(x, y);
-		tileEntities.put(pos, entity);
+		patch.setTileEntity(pos, entity);
 	}
 	
 	public void setTileEntity(int x, int y, Optional<TileEntity> optEntity) {

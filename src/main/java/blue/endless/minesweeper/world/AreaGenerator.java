@@ -7,9 +7,9 @@ import java.util.Optional;
 public interface AreaGenerator {
 	
 	/**
-	 * Initializes
+	 * Initializes this AreaGenerator.
 	 * This method MUST be called before any other methods are valid on this interface.
-	 * @param area The Area (world? dimension?) being generated in. This instance will ONLY be used for this Area.
+	 * @param area The Area being generated in. This instance MUST only be used for this Area.
 	 */
 	public void startGenerating(Area area);
 	
@@ -19,28 +19,29 @@ public interface AreaGenerator {
 	 * @param xofs  The x coordinate of the leftmost column of tiles in the IntTable
 	 * @param yofs  The y coordinate of the topmost row of tiles in the IntTable
 	 */
-	public default void generate(Area area, IntTable background, IntTable foreground, int xofs, int yofs) {
-		for(int y=0; y<background.width(); y++) {
-			for(int x=0; x<background.height(); x++) {
-				int tileId = generateBackgroundTile(xofs+x, yofs+y);
-				background.set(x, y, tileId);
+	public default void generate(Area area, Patch patch, int xofs, int yofs) {
+		int missingId = area.getId(area.getMissingTile()).orElse(0);
+		
+		for(int y=0; y<patch.width(); y++) {
+			for(int x=0; x<patch.height(); x++) {
 				
-				tileId = generateForegroundTile(xofs+x, yofs+y);
-				foreground.set(x, y, tileId);
+				Tile bg = generateBackgroundTile(xofs+x, yofs+y);
+				patch.setBackground(x, y, area.getId(bg).orElse(missingId));
 				
-				Optional<TileEntity> te = generateTileEntity(xofs+x, yofs+y);
-				if (te.isPresent()) {
-					area.setTileEntity(xofs+x, yofs+y, te.get());
+				Optional<Tile> fg = generateForegroundTile(xofs+x, yofs+y);
+				if (fg.isPresent()) {
+					patch.setForeground(x, y, area.getId(fg.get()));
+				} else {
+					patch.clearForeground(x, y);
 				}
 			}
 		}
 		
 		ArrayList<FreeEntity> entities = new ArrayList<>();
-		generateFreeEntities(xofs, yofs, background.width(), background.height(), entities);
+		generateFreeEntities(xofs, yofs, patch.width(), patch.height(), entities);
 	}
 	
-	public int generateBackgroundTile(int x, int y);
-	public int generateForegroundTile(int x, int y);
-	public Optional<TileEntity> generateTileEntity(int x, int y);
+	public Tile generateBackgroundTile(int x, int y);
+	public Optional<Tile> generateForegroundTile(int x, int y);
 	public void generateFreeEntities(int xofs, int yofs, int width, int height, List<FreeEntity> entities);
 }

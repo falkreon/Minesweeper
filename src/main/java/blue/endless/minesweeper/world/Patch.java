@@ -38,12 +38,32 @@ public class Patch {
 		return OptionalInt.of(value);
 	}
 	
+	public void setBackground(int x, int y, int value) {
+		background.set(x, y, value);
+	}
+	
+	public void setForeground(int x, int y, int value) {
+		foreground.set(x, y, value);
+	}
+	
+	public void setForeground(int x, int y, OptionalInt value) {
+		
+	}
+	
+	public void clearForeground(int x, int y) {
+		foreground.set(x, y, -1);
+	}
+	
 	public Optional<TileEntity> tileEntityAt(Vector2i pos) {
 		return Optional.ofNullable(tileEntities.get(pos));
 	}
 	
 	public Optional<TileEntity> tileEntityAt(int x, int y) {
 		return tileEntityAt(new Vector2i(x, y));
+	}
+	
+	public void setTileEntity(Vector2i pos, TileEntity te) {
+		tileEntities.put(pos, te);
 	}
 	
 	public void setTileEntity(Vector2i pos, Optional<TileEntity> te) {
