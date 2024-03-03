@@ -1,22 +1,34 @@
 package blue.endless.minesweeper.world;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
 
+import blue.endless.minesweeper.world.te.FlagTileEntity;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 
 public class Area {
-	
+	private long seed = 4L; // Chosen by fair diceroll, guaranteed to be random. See https://xkcd.com/221/
 	private Tile baseBackgroundTile = new Tile();
 	private Tile baseForegroundTile = new Tile();
 	private Tile missingTile = new Tile();
 	
 	private Int2ObjectOpenHashMap<Tile> tileset = new Int2ObjectOpenHashMap<>();
-	private Map<Vector2i, TileEntity> tileEntities = new HashMap<>();
 	private AreaGenerator generator;
+	
+	private final int patchSize;
+	private final int patchesWide;
+	private final int patchesHigh;
+	
+	List<FreeEntity> entities = new ArrayList<>();
 	
 	/**
 	 * In the future, Area will disambiguate to several Patches, one per 1024x1024 "patch"
@@ -24,13 +36,18 @@ public class Area {
 	private Patch patch;
 	
 	public Area() {
+		//patchSize = 1024;
+		patchSize = 128;
+		patchesWide = 1;
+		patchesHigh = 1;
+		
 		baseForegroundTile.setForeground(true);
 		
 		tileset.put(-1, missingTile);
 		tileset.put(0, baseBackgroundTile);
 		tileset.put(1, baseForegroundTile);
 		
-		patch = new Patch(1024, 1024);
+		patch = new Patch(patchSize, patchSize);
 	}
 	
 	public Tile getMissingTile() {
@@ -43,6 +60,10 @@ public class Area {
 	
 	public Tile baseBackgroundTile() {
 		return baseBackgroundTile;
+	}
+	
+	public long getSeed() {
+		return seed;
 	}
 	
 	//TODO: Some way for apps to query all tiles and find a specific, desired tile.
@@ -61,9 +82,95 @@ public class Area {
 			.findFirst();
 	}
 	
+	public void addEntity(FreeEntity entity) {
+		entities.add(entity);
+	}
+	
+	public void removeEntity(FreeEntity entity) {
+		entities.remove(entity);
+	}
+	
+	public List<FreeEntity> entities() {
+		return List.copyOf(entities);
+	}
+	
+	public void removeEntityIf(Predicate<FreeEntity> predicate) {
+		Iterator<FreeEntity> iterator = entities.iterator();
+		while (iterator.hasNext()) {
+			FreeEntity cur = iterator.next();
+			if (predicate.test(cur)) iterator.remove();
+		}
+	}
+	
 	//FIXME: THIS IS TEMPORARY
 	public void generate() {
 		generator.generate(this, patch, 0, 0);
+	}
+	
+	public int adjacentMineCount(Vector2i pos) {
+		return adjacentMineCount(pos.x(), pos.y());
+	}
+	
+	public int adjacentMineCount(int x, int y) {
+		int result = 0;
+		for(int dy=-1; dy<=1; dy++) {
+			for(int dx=-1; dx<=1; dx++) {
+				if (dx==0 && dy==0) continue;
+				if (getTileEntity(x + dx, y + dy).isPresent()) {
+					result++;
+				}
+			}
+		}
+		
+		return result;
+	}
+	
+	public void revealSimple(int x, int y) {
+		patch.clearForeground(x, y);
+	}
+	
+	private static final int MAX_ITERATIONS = 5000;
+	public void revealAndChain(int x, int y) {
+		Optional<TileEntity> toUncover = getTileEntity(x, y);
+		if (toUncover.isPresent()) {
+			
+		} else {
+			//Do a regular recursive search
+			Deque<Vector2i> queue = new ArrayDeque<>();
+			Set<Vector2i> searched = new HashSet<>();
+			queue.add(new Vector2i(x, y));
+			searched.add(new Vector2i(x, y));
+			
+			int iterations = 0;
+			while(!queue.isEmpty() && iterations < MAX_ITERATIONS) {
+				Vector2i pos = queue.removeFirst();
+				int countAtLocation = adjacentMineCount(pos);
+				//Minesweeper.LOGGER.info("  " + pos + ", count: " + countAtLocation);
+				revealSimple(pos.x(), pos.y());
+				if (countAtLocation == 0) {
+					for(int dy=-1; dy<=1; dy++) {
+						for(int dx=-1; dx<=1; dx++) {
+							if (dx==0 && dy==0) continue;
+							Vector2i v = pos.add(dx, dy);
+							if (!searched.contains(v)) {
+								queue.addLast(v);
+								searched.add(v);
+							}
+						}
+					}
+				}
+				
+				iterations++;
+			}
+		}
+	}
+	
+	public int getWidth() {
+		return patchesWide * patchSize;
+	}
+	
+	public int getHeight() {
+		return patchesHigh * patchSize;
 	}
 	
 	public Optional<Tile> getForegroundTile(int x, int y) {
@@ -85,17 +192,27 @@ public class Area {
 	
 	public void setTileEntity(int x, int y, Optional<TileEntity> optEntity) {
 		Vector2i pos = new Vector2i(x, y);
-		optEntity.ifPresentOrElse(
-			it -> tileEntities.put(pos, it),
-			() -> tileEntities.remove(pos)
-		);
+		patch.setTileEntity(pos, optEntity);
 	}
 	
 	public Optional<TileEntity> getTileEntity(int x, int y) {
-		return Optional.ofNullable(tileEntities.get(new Vector2i(x, y)));
+		return patch.tileEntityAt(x, y);
 	}
 
 	public void setGenerator(AreaGenerator generator) {
 		this.generator = generator;
+		generator.startGenerating(this);
+	}
+
+	public boolean isFlagged(int x, int y) {
+		return patch.flagAt(x, y).isPresent();
+	}
+	
+	public void flag(int x, int y, boolean flag) {
+		if (flag) {
+			patch.setFlag(new Vector2i(x, y), Optional.of(new FlagTileEntity())); // TODO: Record our flag image
+		} else {
+			patch.setFlag(new Vector2i(x, y), Optional.empty());
+		}
 	}
 }

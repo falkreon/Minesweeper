@@ -18,6 +18,10 @@ public record Vector2i(int x, int y) {
 		return new Vector2i(x + value, y + value);
 	}
 	
+	public Vector2i add(int x, int y) {
+		return new Vector2i(this.x + x, this.y + y);
+	}
+	
 	public Vector2i add(Vector2i other) {
 		return new Vector2i(x + other.x, y + other.y);
 	}

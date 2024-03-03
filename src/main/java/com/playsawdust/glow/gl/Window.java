@@ -1,5 +1,7 @@
 package com.playsawdust.glow.gl;
 
+import java.util.function.IntConsumer;
+
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.glfw.GLFWErrorCallback;
 import org.lwjgl.opengl.GL;
@@ -8,9 +10,12 @@ import org.lwjgl.opengl.GLDebugMessageCallbackI;
 import org.lwjgl.opengl.KHRDebug;
 import org.lwjgl.system.MemoryUtil;
 
-import blue.endless.minesweeper.Minesweeper;
-
 import com.playsawdust.glow.render.Painter;
+
+import blue.endless.minesweeper.Minesweeper;
+import blue.endless.tinyevents.Event;
+import blue.endless.tinyevents.EventFactories;
+import blue.endless.tinyevents.function.IntBiConsumer;
 
 public class Window {
 	private GLFWErrorCallback glfwErrorCallback;
@@ -21,6 +26,11 @@ public class Window {
 	private int width = 854;
 	private int height = 480;
 	private String title;
+	
+	private static Event<IntBiConsumer> onLeftMouseUp = EventFactories.intBiConsumer();
+	private static Event<IntBiConsumer> onRightMouseUp = EventFactories.intBiConsumer();
+	private static Event<IntConsumer> onKeyDown = EventFactories.intConsumer();
+	private static Event<IntConsumer> onKeyUp = EventFactories.intConsumer();
 	
 	public Window() {
 		this("");
@@ -53,6 +63,8 @@ public class Window {
 		GLFW.glfwSetWindowSizeCallback(this.handle, this::windowSizeCallback);
 		GLFW.glfwSetWindowFocusCallback(this.handle, this::windowFocusCallback);
 		GLFW.glfwSetCursorEnterCallback(this.handle, this::cursorEnterCallback);
+		GLFW.glfwSetMouseButtonCallback(this.handle, this::mouseButtonCallback);
+		GLFW.glfwSetKeyCallback(this.handle, this::keyCallback);
 		
 		//painter = new Painter(this);
 		painter = new WindowPainter(this);
@@ -114,11 +126,51 @@ public class Window {
 		
 	}
 	
+	private void mouseButtonCallback(long handle, int button, int action, int modifiers) {
+		if (action != 0) return; //For now, we only care about mouseUp events
+		
+		double[] xa = new double[1];
+		double[] ya = new double[1];
+		GLFW.glfwGetCursorPos(handle, xa, ya);
+		int x = (int) xa[0];
+		int y = (int) ya[0];
+		
+		switch(button) {
+			case 0 -> onLeftMouseUp.invoker().accept(x, y);
+			case 1 -> onRightMouseUp.invoker().accept(x, y);
+		}
+	}
+	
+	private void keyCallback(long window, int key, int scancode, int action, int mods) {
+		//1 is down, 0 is up, 2 is repeat
+		if (action == GLFW.GLFW_PRESS) {
+			onKeyDown.invoker().accept(scancode);
+		} else if (action == GLFW.GLFW_RELEASE) {
+			onKeyUp.invoker().accept(scancode);
+		}
+	}
+	
+	public Event<IntBiConsumer> onLeftMouseUp() {
+		return onLeftMouseUp;
+	}
+	
+	public Event<IntBiConsumer> onRightMouseUp() {
+		return onRightMouseUp;
+	}
+	
+	public Event<IntConsumer> onKeyDown() {
+		return onKeyDown;
+	}
+	
+	public Event<IntConsumer> onKeyUp() {
+		return onKeyUp;
+	}
+	
 	public boolean shouldClose() {
 		return GLFW.glfwWindowShouldClose(handle);
 	}
 	
-	public Painter startDrawing() {
+	public WindowPainter startDrawing() {
 		painter.startDrawing();
 		return painter;
 	}

@@ -11,6 +11,7 @@ public class Patch {
 	private IntTable background;
 	private IntTable foreground;
 	private HashMap<Vector2i, TileEntity> tileEntities = new HashMap<>();
+	private HashMap<Vector2i, TileEntity> topTileEntities = new HashMap<>();
 	
 	public Patch(int width, int height) {
 		background = new IntTable(width, height);
@@ -47,7 +48,7 @@ public class Patch {
 	}
 	
 	public void setForeground(int x, int y, OptionalInt value) {
-		
+		foreground.set(x, y, value.orElse(-1));
 	}
 	
 	public void clearForeground(int x, int y) {
@@ -70,6 +71,21 @@ public class Patch {
 		te.ifPresentOrElse(
 			it -> tileEntities.put(pos, it),
 			() -> tileEntities.remove(pos)
+		);
+	}
+	
+	public Optional<TileEntity> flagAt(Vector2i pos) {
+		return Optional.ofNullable(topTileEntities.get(pos));
+	}
+	
+	public Optional<TileEntity> flagAt(int x, int y) {
+		return flagAt(new Vector2i(x, y));
+	}
+	
+	public void setFlag(Vector2i pos, Optional<TileEntity> te) {
+		te.ifPresentOrElse(
+			it -> topTileEntities.put(pos, it),
+			() -> topTileEntities.remove(pos)
 		);
 	}
 }

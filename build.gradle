@@ -12,10 +12,6 @@ base {
 
 repositories {
 	mavenLocal();
-	//maven {
-	//	name = "Jitpack"
-	//	url 'https://jitpack.io'
-	//}
 }
 
 loom {
@@ -32,7 +28,9 @@ dependencies {
 	mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
 	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
 	
-	modImplementation "com.playsawdust.glow:glow-base:0.0.1"
+	modApi "com.playsawdust.glow:glow-base:0.0.1"
+	modApi "blue.endless:jankson:2.0.0-alpha.1"
+	modApi "blue.endless:TinyEvents:2.0.0"
 }
 
 processResources {

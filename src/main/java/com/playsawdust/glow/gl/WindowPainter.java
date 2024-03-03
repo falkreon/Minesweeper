@@ -136,6 +136,47 @@ public class WindowPainter implements Painter {
 			
 			setColor(RGBColor.fromGamma(1, 1, 1, opacity));
 			GL32.glBindTexture(GL32.GL_TEXTURE_2D, texture.getHandle());
+			GL32.glTexParameteri(GL32.GL_TEXTURE_2D, GL32.GL_TEXTURE_MAG_FILTER, GL32.GL_NEAREST);
+			
+			GL32.glDrawArrays(GL32.GL_TRIANGLES, 0, 6);
+		}
+	}
+	
+	public void drawImage(ImageData image, int destX, int destY, int destWidth, int destHeight, int srcX, int srcY, int srcWidth, int srcHeight, float opacity) {
+		try (Scope scope = Scope.create()) {
+			Texture texture = (image instanceof Texture tex) ? tex : scope.add(new Texture(image));
+			
+			final float px_x = 1.0f / image.getWidth();
+			final float px_y = 1.0f / image.getHeight();
+			
+			final float u1 = srcX * px_x;
+			final float v1 = srcY * px_y;
+			
+			final float u2 = u1 + (srcWidth * px_x);
+			final float v2 = v1 + (srcHeight * px_y);
+			
+			float[] bufferData = {
+				destX,             destY,              u1, v1,
+				destX,             destY + destHeight, u1, v2,
+				destX + destWidth, destY + destHeight, u2, v2,
+				destX,             destY,              u1, v1,
+				destX + destWidth, destY + destHeight, u2, v2,
+				destX + destWidth, destY,              u2, v1
+			};
+			
+			GL32.glBindVertexArray(vao);
+			
+			GL32.glBindBuffer(GL32.GL_ARRAY_BUFFER, vbo);
+			GL32.glBufferData(GL32.GL_ARRAY_BUFFER, bufferData, GL32.GL_STATIC_DRAW);
+			
+			GL32.glVertexAttribPointer(0, 2, GL32.GL_FLOAT, false, 4 * Float.BYTES, 0);
+			GL32.glVertexAttribPointer(1, 2, GL32.GL_FLOAT, false, 4 * Float.BYTES, 2 * Float.BYTES);
+			GL32.glEnableVertexAttribArray(0);
+			GL32.glEnableVertexAttribArray(1);
+			
+			setColor(RGBColor.fromGamma(1, 1, 1, opacity));
+			GL32.glBindTexture(GL32.GL_TEXTURE_2D, texture.getHandle());
+			GL32.glTexParameteri(GL32.GL_TEXTURE_2D, GL32.GL_TEXTURE_MAG_FILTER, GL32.GL_NEAREST);
 			
 			GL32.glDrawArrays(GL32.GL_TRIANGLES, 0, 6);
 		}

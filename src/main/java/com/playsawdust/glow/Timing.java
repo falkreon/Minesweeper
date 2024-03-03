@@ -64,6 +64,14 @@ public class Timing {
 		return this;
 	}
 	
+	public double getPartialTick() {
+		return (double) partialTicks / (double) nanosPerTick;
+	}
+	
+	public double getPartialFrame() {
+		return (double) partialFrames / (double) nanosPerFrame;
+	}
+	
 	/**
 	 * Returns the specified cycles per second in nanos-per-cycle so they can be used to measure timing
 	 * @param hz the desired number of cycles per second

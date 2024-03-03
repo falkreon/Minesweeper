@@ -1,13 +1,18 @@
 package blue.endless.minesweeper.world;
 
+import blue.endless.jankson.api.document.ObjectElement;
+import blue.endless.jankson.api.document.PrimitiveElement;
+
 public class Tile {
-	private boolean foreground = false;
+	ObjectElement data = new ObjectElement();
 	
 	public boolean isForeground() {
-		return foreground;
+		return data.getPrimitive("foreground").asBoolean().orElse(false);
 	}
 	
 	public void setForeground(boolean foreground) {
-		this.foreground = foreground;
+		data.put("foreground", PrimitiveElement.of(foreground));
 	}
+	
+	public ObjectElement data() { return data; }
 }
