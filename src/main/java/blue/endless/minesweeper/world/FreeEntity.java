@@ -1,64 +1,65 @@
 package blue.endless.minesweeper.world;
 
+import com.playsawdust.glow.vecmath.Vector2d;
+
 public class FreeEntity implements Entity {
-	private int lastX = 0;
-	private int lastY = 0;
-	private int nextX = 0;
-	private int nextY = 0;
-	private int vx = 0;
-	private int vy = 0;
+	private Vector2d lastPos = new Vector2d(0,0);
+	private Vector2d nextPos = new Vector2d(0,0);
+	private Vector2d velocity = new Vector2d(0,0);
 	
-	public void setPosition(int x, int y) {
-		this.nextX = x;
-		this.nextY = y;
-		this.lastX = x;
-		this.lastY = y;
+	/**
+	 * There is a rectangle, from (pos.x-(size/2), pos.y-size) to (pos.x+(size/2), pos.y) that governs collision.
+	 * "Long" entities are not possible; entities need to be able to turn freely without colliding with anything.
+	 * "height" for entities is cosmetic, and determined by the sprite. FreeEntities are always located at the bottom
+	 * center of their sprite.
+	 */
+	private int size = 12;
+	
+	public void setPosition(Vector2d pos) {
+		lastPos = pos;
+		nextPos = pos;
 	}
 	
-	public void moveTo(int x, int y) {
-		this.nextX = x;
-		this.nextY = y;
+	public void moveTo(double x, double y) {
+		moveTo(new Vector2d(x, y));
 	}
 	
-	public void moveTo(Vector2i pos) {
-		this.nextX = pos.x();
-		this.nextY = pos.y();
+	public void moveTo(Vector2d pos) {
+		this.nextPos = pos;
 	}
 	
 	/** Sets all the "last" values to the "cur" values so there is no further interpolation until position changes. */
 	public void catchUp() {
-		lastX = nextX;
-		lastY = nextY;
+		lastPos = nextPos;
 	}
 	
-	public Vector2i lastPosition() {
-		return new Vector2i(lastX, lastY);
+	public Vector2d lastPos() {
+		return lastPos;
 	}
 	
-	public Vector2i position() {
-		return new Vector2i(nextX, nextY);
+	public Vector2d nextPos() {
+		return nextPos;
 	}
 	
-	public Vector2i position(double t) {
+	public Vector2d interpolatedPosition(double t) {
 		if (t<0) t=0; if (t>1) t=1;
 		
-		double xt = (nextX * t) + (lastX * (1-t));
-		double yt = (nextY * t) + (lastY * (1-t));
-		
-		return new Vector2i((int) Math.round(xt), (int) Math.round(yt));
+		return lastPos.multiply(1.0-t).add(nextPos.multiply(t));
 	}
 	
-	public Vector2i velocity() {
-		return new Vector2i(vx, vy);
+	public Vector2d velocity() {
+		return velocity;
 	}
 	
-	public void setVelocity(int vx, int vy) {
-		this.vx = vx;
-		this.vy = vy;
+	public void setVelocity(Vector2d velocity) {
+		this.velocity = velocity;
 	}
 	
-	public void setVelocity(Vector2i vec) {
-		this.vx = vec.x();
-		this.vy = vec.y();
+	public int size() {
+		return size;
+	}
+	
+	public void setSize(int size) {
+		this.size = size;
 	}
 }

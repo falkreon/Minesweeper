@@ -13,6 +13,7 @@ import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 import blue.endless.minesweeper.world.te.FlagTileEntity;
+import blue.endless.tinyevents.function.IntBiConsumer;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 
 public class Area {
@@ -130,7 +131,7 @@ public class Area {
 	}
 	
 	private static final int MAX_ITERATIONS = 5000;
-	public void revealAndChain(int x, int y) {
+	public void revealAndChain(int x, int y, IntBiConsumer markDirtyCallback) {
 		Optional<TileEntity> toUncover = getTileEntity(x, y);
 		if (toUncover.isPresent()) {
 			
@@ -147,6 +148,7 @@ public class Area {
 				int countAtLocation = adjacentMineCount(pos);
 				//Minesweeper.LOGGER.info("  " + pos + ", count: " + countAtLocation);
 				revealSimple(pos.x(), pos.y());
+				markDirtyCallback.accept(pos.x(), pos.y());
 				if (countAtLocation == 0) {
 					for(int dy=-1; dy<=1; dy++) {
 						for(int dx=-1; dx<=1; dx++) {

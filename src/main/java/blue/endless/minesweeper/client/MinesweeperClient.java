@@ -1,5 +1,6 @@
 package blue.endless.minesweeper.client;
 
+import java.util.ArrayDeque;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -13,6 +14,7 @@ import com.playsawdust.glow.image.ImageData;
 import com.playsawdust.glow.image.ImagePainter;
 import com.playsawdust.glow.image.SrgbImageData;
 import com.playsawdust.glow.image.color.BlendMode;
+import com.playsawdust.glow.vecmath.Vector2d;
 
 import blue.endless.minesweeper.Identifier;
 import blue.endless.minesweeper.ImageSupplier;
@@ -30,6 +32,7 @@ public class MinesweeperClient {
 	private static int scrolly = 0;
 	
 	private static Map<Vector2i, Texture> bakedTiles = new HashMap<>(); //TODO: Replace with LRU cache?
+	private static ArrayDeque<Vector2i> dirtyTiles = new ArrayDeque<>();
 	private static FreeEntity player = new FreeEntity();
 	
 	private static ImageSupplier images;
@@ -44,13 +47,13 @@ public class MinesweeperClient {
 		
 		mainArea = new Area();
 		
-		player.setPosition(32*16, 32*16);
+		player.setPosition(new Vector2d(32*16, 32*16));
 		mainArea.addEntity(player);
 		
 		mainArea.setGenerator(new BaseAreaGenerator());
 		mainArea.generate(); //FIXME: This is temporary! In reality we will generate a patch at a time!
 		Minesweeper.LOGGER.info("Doing initial reveal...");
-		mainArea.revealAndChain(32, 32);
+		mainArea.revealAndChain(32, 32, MinesweeperClient::markDirty);
 		Minesweeper.LOGGER.info("Map Complete.");
 		
 		images = new ImageSupplier();
@@ -67,11 +70,11 @@ public class MinesweeperClient {
 			int tileX = ((x + scrollx) / scale) / 16;
 			int tileY = ((y + scrolly) / scale) / 16;
 			//Minesweeper.LOGGER.info("Handling click at tile "+tileX+", "+tileY+"...");
-			mainArea.revealAndChain(tileX, tileY);
+			mainArea.revealAndChain(tileX, tileY, MinesweeperClient::markDirty);
 			
-			Minesweeper.LOGGER.info("Rebaking at tile "+tileX+", "+tileY+"...");
-			rebake(images, mainArea, tileX, tileY);
-			Minesweeper.LOGGER.info("Complete.");
+			//Minesweeper.LOGGER.info("Rebaking at tile "+tileX+", "+tileY+"...");
+			//rebake(images, mainArea, tileX, tileY);
+			//Minesweeper.LOGGER.info("Complete.");
 		});
 		
 		gameWindow.onRightMouseUp().register((x, y) -> {
@@ -119,6 +122,11 @@ public class MinesweeperClient {
 		gameWindow.delete();
 	}
 	
+	public static void markDirty(int x, int y) {
+		Vector2i pos = new Vector2i(x / 32, y / 32);
+		if (!dirtyTiles.contains(pos)) dirtyTiles.addLast(pos);
+	}
+	
 	public void bakeAll(ImageSupplier images, Area area) {
 		int tilesWide = area.getWidth() / 32;
 		int tilesHigh = area.getHeight() / 32;
@@ -147,7 +155,14 @@ public class MinesweeperClient {
 		bakedTiles.put(pos, bake(images, area, tx * 32, ty * 32, 32, 32));
 	}
 	
-	public Texture bake(ImageSupplier images, Area area, int xofs, int yofs, int width, int height) {
+	public static void rebakeTile(ImageSupplier images, Area area, Vector2i tilePos) {
+		Texture t = bakedTiles.remove(tilePos);
+		if (t != null) t.destroy();
+		
+		bakedTiles.put(tilePos, bake(images, area, tilePos.x() * 32, tilePos.y() * 32, 32, 32));
+	}
+	
+	public static Texture bake(ImageSupplier images, Area area, int xofs, int yofs, int width, int height) {
 		Minesweeper.LOGGER.info("Baking at offset "+xofs+", "+yofs);
 		SrgbImageData data = new SrgbImageData(width * 16, height * 16);
 		ImagePainter painter = new ImagePainter(data, BlendMode.NORMAL);
@@ -210,6 +225,13 @@ public class MinesweeperClient {
 	}
 	
 	public static void frame(Timing timing, Window gameWindow) {
+		//Before we process this frame, let's rebake tiles that need it
+		Vector2i dirty = dirtyTiles.pollFirst();
+		if (dirty != null) {
+			rebakeTile(images, mainArea, dirty);
+		}
+		
+		
 		gameWindow.clear(0, 0, 0, 0);
 		
 		WindowPainter g = gameWindow.startDrawing();
@@ -221,7 +243,7 @@ public class MinesweeperClient {
 		
 		double t = timing.getPartialTick();
 		if (t>1D) t=1D; if (t<0D) t=0D;
-		Vector2i vec = player.position(t);
+		Vector2d vec = player.interpolatedPosition(t);
 		
 		/*
 		 * Okay folks, the goal is to lock the camera (scrollx, scrolly) onto the center of the character.
@@ -230,8 +252,10 @@ public class MinesweeperClient {
 		int halfWidth = gameWindow.getWidth() / 2;
 		int halfHeight = gameWindow.getHeight() / 2;
 		
-		scrollx = (vec.x() * scale) - halfWidth; //Center of character is at the center of its sprite
-		scrolly = ((vec.y() - (image.getHeight() / 2)) * scale) - halfHeight; //Center of character is halfway up the sprite from the entity location.
+		int playerX = (int) Math.round(vec.x());
+		int playerY = (int) Math.round(vec.y());
+		scrollx = (playerX * scale) - halfWidth; //Center of character is at the center of its sprite
+		scrolly = ((playerY - (image.getHeight() / 2)) * scale) - halfHeight; //Center of character is halfway up the sprite from the entity location.
 		//System.out.println("L: "+player.lastPosition()+" N: "+player.position()+" I: "+vec+" S: "+scrollx+", "+scrolly+" T:"+t);
 		
 		for(int y=0; y<tilesHigh; y++) {
@@ -245,43 +269,205 @@ public class MinesweeperClient {
 		
 		for(FreeEntity entity : mainArea.entities()) {
 			//TODO: Grab texture for this entity
-			Vector2i screenPosition = player.position(t).multiply(scale).add(-scrollx, -scrolly);
-			int halfImageWidth = image.getWidth() / 2;
+			Vector2d screenPosition = entity.interpolatedPosition(t).multiply(scale).add(new Vector2d(-scrollx, -scrolly));
+			int halfImageWidth = (image.getWidth() / 2) * scale;
 			
-			g.drawImage(image, screenPosition.x() - halfImageWidth, screenPosition.y() - image.getHeight(), image.getWidth() * scale, image.getHeight() * scale, 0, 0, image.getWidth(), image.getHeight(), 1.0f);
+			g.drawImage(image, (int) Math.round(screenPosition.x()) - halfImageWidth, (int) Math.round(screenPosition.y()) - (image.getHeight() * scale), image.getWidth() * scale, image.getHeight() * scale, 0, 0, image.getWidth(), image.getHeight(), 1.0f);
 		}
 		
 		gameWindow.swapBuffers();
 	}
 	
+	public static final double CONTROL_VELOCITY = 2.0;
+	public static final double CONTROL_SPEED_CAP = 6.0;
+	public static final double TURN_DRAG = 4.0f;
+	public static final double IDLE_DRAG = 2.0f;
+	public static final double VELOCITY_DEADZONE = 0.5;
+	
 	public static void tick(Timing t) {
 		for(FreeEntity entity : mainArea.entities()) {
 			entity.catchUp();
+			
+			Vector2d proposedLocation = entity.nextPos().add(entity.velocity());
+			
+			//Check/Move in X direction first
+			if (checkCollision((int) proposedLocation.x(), (int) entity.nextPos().y(), entity.size(), mainArea)) {
+				int edgeDisplacement = (int) ((entity.size() / 2) * Math.signum(entity.velocity().x()));
+				int edge = (int) entity.nextPos().x() + edgeDisplacement;
+				
+				if (entity.velocity().x() > 0) {
+					int snapped = (edge / 16) * 16 + 15;
+					int newCenter = snapped - edgeDisplacement;
+					entity.moveTo(new Vector2d(newCenter, entity.nextPos().y()));
+				} else if (entity.velocity().x() < 0) {
+					int snapped = (edge / 16) * 16;
+					if (snapped < 0) snapped = 0;
+					int newCenter = snapped - edgeDisplacement;
+					entity.moveTo(new Vector2d(newCenter, entity.nextPos().y()));
+				}
+			} else {
+				entity.moveTo(proposedLocation.x(), entity.nextPos().y());
+			}
+			
+			//Check/Move in Y direction
+			if (checkCollision((int) entity.nextPos().x(), (int) proposedLocation.y(), entity.size(), mainArea)) {
+				int edgeDisplacement = (entity.velocity().y() < 0) ? -entity.size() : 0;
+				int edge = (int) entity.nextPos().y() + edgeDisplacement;
+				
+				if (entity.velocity().y() > 0) {
+					int snapped = (edge / 16) * 16 + 15;
+					int newY = snapped - edgeDisplacement;
+					entity.moveTo(new Vector2d(entity.nextPos().x(), newY));
+				} else if (entity.velocity().y() < 0) {
+					int snapped = (edge / 16) * 16;
+					if (snapped < 0) snapped = 0;
+					int newY = snapped - edgeDisplacement;
+					entity.moveTo(new Vector2d(entity.nextPos().x(), newY));
+				}
+			} else {
+				entity.moveTo(entity.nextPos().x(), proposedLocation.y());
+			}
 		}
 		
 		//player.catchUp();
+		boolean rightPressed = controls.get("right").isPressed();
+		boolean leftPressed = controls.get("left").isPressed();
+		boolean upPressed = controls.get("up").isPressed();
+		boolean downPressed = controls.get("down").isPressed();
 		
-		if (controls.get("right").isPressed()) {
-			//TODO: Check for collisions
-			player.moveTo(player.position().add(8, 0));
+		if (rightPressed && !leftPressed) {
+			Vector2d velocity = player.velocity();
+			if (velocity.x() < 0) {
+				//Apply extra drag to turn us around quick
+				double vx = softReduce(velocity.x(), TURN_DRAG);
+				player.setVelocity(new Vector2d(vx, velocity.y()));
+			}
+			
+			velocity = player.velocity();
+			double vx = addWithSoftCap(velocity.x(), CONTROL_VELOCITY, CONTROL_SPEED_CAP);
+			player.setVelocity(new Vector2d(vx, velocity.y()));
 		}
 		
-		if (controls.get("left").isPressed()) {
-			//TODO: Check for collisions
-			player.moveTo(player.position().add(-8, 0));
+		if (leftPressed && !rightPressed) {
+			Vector2d velocity = player.velocity();
+			if (velocity.x() > 0) {
+				//Apply extra drag to turn us around quick
+				double vx = softReduce(velocity.x(), TURN_DRAG);
+				player.setVelocity(new Vector2d(vx, velocity.y()));
+			}
+			
+			velocity = player.velocity();
+			double vx = addWithSoftCap(velocity.x(), -CONTROL_VELOCITY, CONTROL_SPEED_CAP);
+			player.setVelocity(new Vector2d(vx, velocity.y()));
+			//player.setVelocity(player.velocity().add(new Vector2d(-CONTROL_VELOCITY, 0)));
 		}
 		
-		if (controls.get("up").isPressed()) {
-			//TODO: Check for collisions
-			player.moveTo(player.position().add(0, -8));
+		if (upPressed && !downPressed) {
+			Vector2d velocity = player.velocity();
+			if (velocity.y() > 0) {
+				//Apply extra drag to turn us around quick
+				double vy = softReduce(velocity.y(), TURN_DRAG);
+				player.setVelocity(new Vector2d(velocity.x(), vy));
+			}
+			
+			velocity = player.velocity();
+			double vy = addWithSoftCap(velocity.y(), -CONTROL_VELOCITY, CONTROL_SPEED_CAP);
+			player.setVelocity(new Vector2d(velocity.x(), vy));
+			//player.setVelocity(player.velocity().add(new Vector2d(0, -CONTROL_VELOCITY)));
 		}
 		
-		if (controls.get("down").isPressed()) {
-			//TODO: Check for collisions
-			player.moveTo(player.position().add(0, 8));
+		if (downPressed && !upPressed) {
+			Vector2d velocity = player.velocity();
+			if (velocity.y() < 0) {
+				//Apply extra drag to turn us around quick
+				double vy = softReduce(velocity.y(), TURN_DRAG);
+				player.setVelocity(new Vector2d(velocity.x(), vy));
+			}
+			
+			velocity = player.velocity();
+			double vy = addWithSoftCap(velocity.y(), CONTROL_VELOCITY, CONTROL_SPEED_CAP);
+			player.setVelocity(new Vector2d(velocity.x(), vy));
+			//player.setVelocity(player.velocity().add(new Vector2d(0, CONTROL_VELOCITY)));
 		}
 		
+		if (!(upPressed || downPressed)) {
+			//Apply drag in the y direction
+			Vector2d oldVelocity = player.velocity();
+			
+			double vy = softReduce(oldVelocity.y(), IDLE_DRAG);
+			if (Math.abs(vy) < VELOCITY_DEADZONE) vy = 0;
+			player.setVelocity(new Vector2d(oldVelocity.x(), vy));
+		}
 		
+		if (!(leftPressed || rightPressed)) {
+			//Apply drag in the x direction
+			Vector2d oldVelocity = player.velocity();
+			
+			double vx = softReduce(oldVelocity.x(), IDLE_DRAG);
+			if (Math.abs(vx) < VELOCITY_DEADZONE) vx = 0;
+			player.setVelocity(new Vector2d(vx, oldVelocity.y()));
+		}
+		
+	}
+	
+	private static double softReduce(double input, double reduceBy) {
+		if (input > 0) {
+			double result = input - reduceBy;
+			return (result < 0) ? 0 : result;
+		} else if (input < 0) {
+			double result = input + reduceBy;
+			return (result > 0) ? 0 : result;
+		}
+		
+		return 0;
+	}
+	
+	private static double addWithSoftCap(double input, double toAdd, double softCap) {
+		if (Math.abs(input) > softCap) {
+			//We behave specially in this case, only applying the delta if it is "pushing against" the direction we're
+			//already capped in
+			if (Math.signum(input) == Math.signum(toAdd)) return input;
+			double proposed = input + toAdd;
+			
+			//Now we make sure we're not going all the way from cap to cap
+			if ((Math.abs(proposed) > softCap) && (Math.signum(proposed) == Math.signum(toAdd))) {
+				//We went from past-cap to past-cap. Return the new cap.
+				return softCap * Math.signum(toAdd);
+			} else {
+				//We've come back in-bounds
+				return proposed;
+			}
+		} else {
+			//We are not capped. Just make sure we don't cap when we add.
+			double proposed = input + toAdd;
+			if (Math.abs(proposed) > softCap) {
+				//We did cap, so return the cap in the direction we're traveling
+				return softCap * Math.signum(toAdd);
+			} else {
+				return proposed;
+			}
+		}
+	}
+	
+	private static boolean checkCollision(int x, int y, int size, Area area) {
+		int x1 = x - (size/2);
+		int y1 = y - (size);
+		
+		int tx = x1 / 16;
+		int ty = y1 / 16;
+		int tx2 = (x1 + size) / 16;
+		int ty2 = (y1 + size) / 16;
+		
+		if (x1 < 0 || y1 < 0) return true;
+		
+		for(int yi=ty; yi<=ty2; yi++) {
+			for(int xi=tx; xi<=tx2; xi++) {
+				if (xi < 0 || yi < 0 || xi >= area.getWidth() || yi >= area.getHeight()) return true;
+				if (area.getForegroundTile(xi, yi).isPresent()) return true;
+			}
+		}
+		
+		return false;
 	}
 
 }
