@@ -78,6 +78,10 @@ public class Patch {
 		return Optional.ofNullable(topTileEntities.get(pos));
 	}
 	
+	public boolean isFlagged(int x, int y) {
+		return topTileEntities.get(new Vector2i(x, y)) != null;
+	}
+	
 	public Optional<TileEntity> flagAt(int x, int y) {
 		return flagAt(new Vector2i(x, y));
 	}

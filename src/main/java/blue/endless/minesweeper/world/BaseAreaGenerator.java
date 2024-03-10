@@ -83,6 +83,7 @@ public class BaseAreaGenerator implements AreaGenerator {
 			
 		}
 		
+		area.receiveGeneratedMines(allocated);
 		Minesweeper.LOGGER.info(allocated + " bombs allocated and placed.");
 		
 		return allocated;

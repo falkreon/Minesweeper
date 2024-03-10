@@ -2,39 +2,37 @@ package blue.endless.minesweeper;
 
 import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import com.playsawdust.glow.image.ImageData;
+import com.playsawdust.glow.image.ImagePainter;
 import com.playsawdust.glow.image.SrgbImageData;
+import com.playsawdust.glow.image.color.BlendMode;
+import com.playsawdust.glow.image.color.RGBColor;
 import com.playsawdust.glow.image.io.PngImageIO;
 import com.playsawdust.glow.io.DataSlice;
+
+import blue.endless.minesweeper.Resources.Resource;
 
 public class ImageSupplier {
 	private ImageData missingno = new SrgbImageData(16, 16);
 	private Map<Identifier, ImageData> images = new HashMap<>();
 	
 	public ImageSupplier() {
-		try {
-			ImageData tileset = PngImageIO.load(
-				DataSlice.of(Files.readAllBytes(Path.of("tiles.png")))
-				);
-			images.put(Identifier.of("ms:tiles.png"), tileset);
-		} catch (IOException e) {
-			e.printStackTrace();
+		Optional<ImageData> image = loadImageInternal(new Identifier("ms","textures/missing.png", ""));
+		if (image.isPresent()) {
+			missingno = image.get();
+		} else {
+			Minesweeper.LOGGER.info("Missingno is missing! Using magic pink instead.");
+			ImagePainter p = new ImagePainter(missingno, BlendMode.NORMAL);
+			p.clear(RGBColor.fromGamma(1, 1, 0, 1));
+			RGBColor black = new RGBColor(1,0,0,0);
+			p.fillRect(8, 0, 8, 8, black);
+			p.fillRect(0, 8, 8, 8, black);
 		}
-		
-		try {
-			ImageData player = PngImageIO.load(
-				DataSlice.of(Files.readAllBytes(Path.of("player.png")))
-				);
-			images.put(Identifier.of("ms:player.png"), player);
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-		
-		//TODO: Load up missingno
 	}
 	
 	public ImageData getImage(Identifier id) {
@@ -51,7 +49,8 @@ public class ImageSupplier {
 				int tileIndex = Integer.parseUnsignedInt(id.selector());
 				
 				Identifier sourceImage = new Identifier(id.namespace(), id.path(), "");
-				maybe = images.get(sourceImage);
+				maybe = getImage(sourceImage);
+				//maybe = images.get(sourceImage);
 				if (maybe!=null) {
 					
 					//Where will the destitch take place?
@@ -78,8 +77,32 @@ public class ImageSupplier {
 				return missingno;
 			}
 			
+		} else {
+			//Try and get it from Resources
+			List<Resource> resources = Resources.get(id);
+			for(Resource r : resources) {
+				try {
+					ImageData image = PngImageIO.load(DataSlice.of(Files.readAllBytes(r.path())));
+					images.put(id, image);
+					return image;
+				} catch (IOException ex) {
+				}
+			}
 		}
 		
 		return missingno;
+	}
+	
+	private Optional<ImageData> loadImageInternal(Identifier id) {
+		List<Resource> resources = Resources.get(id);
+		for(Resource r : resources) {
+			try {
+				ImageData image = PngImageIO.load(DataSlice.of(Files.readAllBytes(r.path())));
+				images.put(id, image);
+				return Optional.of(image);
+			} catch (IOException ex) {
+			}
+		}
+		return Optional.empty();
 	}
 }

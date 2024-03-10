@@ -10,6 +10,7 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
 import java.util.function.Predicate;
+import java.util.random.RandomGenerator;
 import java.util.stream.Stream;
 
 import blue.endless.minesweeper.world.te.FlagTileEntity;
@@ -31,6 +32,10 @@ public class Area {
 	
 	List<FreeEntity> entities = new ArrayList<>();
 	
+	private int totalMines = 0;
+	private int totalFlags = 0;
+	private int totalPoints = 0; //TODO: Move this to a per-player object
+	
 	/**
 	 * In the future, Area will disambiguate to several Patches, one per 1024x1024 "patch"
 	 */
@@ -49,6 +54,10 @@ public class Area {
 		tileset.put(1, baseForegroundTile);
 		
 		patch = new Patch(patchSize, patchSize);
+	}
+	
+	public void chooseRandomSeed() {
+		this.seed = RandomGenerator.of("Xoshiro256PlusPlus").nextLong();
 	}
 	
 	public Tile getMissingTile() {
@@ -108,6 +117,10 @@ public class Area {
 		generator.generate(this, patch, 0, 0);
 	}
 	
+	public void receiveGeneratedMines(int mineCount) {
+		totalMines += mineCount;
+	}
+	
 	public int adjacentMineCount(Vector2i pos) {
 		return adjacentMineCount(pos.x(), pos.y());
 	}
@@ -128,42 +141,66 @@ public class Area {
 	
 	public void revealSimple(int x, int y) {
 		patch.clearForeground(x, y);
+		patch.setFlag(new Vector2i(x, y), Optional.empty()); //Clear flag if there is one here
 	}
 	
 	private static final int MAX_ITERATIONS = 5000;
-	public void revealAndChain(int x, int y, IntBiConsumer markDirtyCallback) {
+	/**
+	 * Reveals the indicated tile
+	 * @param x
+	 * @param y
+	 * @param markDirtyCallback
+	 */
+	public int revealAndChain(int x, int y, IntBiConsumer markDirtyCallback) {
 		Optional<TileEntity> toUncover = getTileEntity(x, y);
 		if (toUncover.isPresent()) {
+			//TODO: Losing the Game
 			
+			return 0;
 		} else {
+			//Figure out if this tile is covered and if there's nothing to reveal, early-out
+			if (patch.foreground(x, y).isEmpty()) return 0;
+			
 			//Do a regular recursive search
 			Deque<Vector2i> queue = new ArrayDeque<>();
 			Set<Vector2i> searched = new HashSet<>();
 			queue.add(new Vector2i(x, y));
 			searched.add(new Vector2i(x, y));
 			
+			int uncovered = 0;
+			
 			int iterations = 0;
 			while(!queue.isEmpty() && iterations < MAX_ITERATIONS) {
 				Vector2i pos = queue.removeFirst();
-				int countAtLocation = adjacentMineCount(pos);
-				//Minesweeper.LOGGER.info("  " + pos + ", count: " + countAtLocation);
-				revealSimple(pos.x(), pos.y());
-				markDirtyCallback.accept(pos.x(), pos.y());
-				if (countAtLocation == 0) {
-					for(int dy=-1; dy<=1; dy++) {
-						for(int dx=-1; dx<=1; dx++) {
-							if (dx==0 && dy==0) continue;
-							Vector2i v = pos.add(dx, dy);
-							if (!searched.contains(v)) {
-								queue.addLast(v);
-								searched.add(v);
+				
+				//Even if this tile would normally be eligible for uncovering, don't uncover it if it's flagged.
+				if (patch.isFlagged(pos.x(), pos.y())) continue;
+				
+				//If at any point we arrive at an uncovered tile, stop and search somewhere else.
+				if (patch.foreground(pos.x(), pos.y()).isPresent()) {
+					
+					int countAtLocation = adjacentMineCount(pos);
+					
+					revealSimple(pos.x(), pos.y());
+					uncovered++;
+					markDirtyCallback.accept(pos.x(), pos.y());
+					if (countAtLocation == 0) {
+						for(int dy=-1; dy<=1; dy++) {
+							for(int dx=-1; dx<=1; dx++) {
+								if (dx==0 && dy==0) continue;
+								Vector2i v = pos.add(dx, dy);
+								if (!searched.contains(v)) {
+									queue.addLast(v);
+									searched.add(v);
+								}
 							}
 						}
 					}
 				}
-				
 				iterations++;
 			}
+			
+			return uncovered;
 		}
 	}
 	
@@ -207,14 +244,41 @@ public class Area {
 	}
 
 	public boolean isFlagged(int x, int y) {
-		return patch.flagAt(x, y).isPresent();
+		return patch.isFlagged(x, y);
 	}
 	
-	public void flag(int x, int y, boolean flag) {
+	public void flag(int x, int y, boolean flag, IntBiConsumer markDirtyCallback) {
+		if (patch.foreground(x, y).isEmpty()) return; //Can't flag empty tiles
+		
 		if (flag) {
-			patch.setFlag(new Vector2i(x, y), Optional.of(new FlagTileEntity())); // TODO: Record our flag image
+			if (!patch.isFlagged(x, y)) {
+				patch.setFlag(new Vector2i(x, y), Optional.of(new FlagTileEntity())); // TODO: Record our flag image
+				this.totalFlags++;
+			}
 		} else {
-			patch.setFlag(new Vector2i(x, y), Optional.empty());
+			if (patch.isFlagged(x, y)) {
+				patch.setFlag(new Vector2i(x, y), Optional.empty());
+				this.totalFlags--;
+			}
+			
 		}
+		
+		markDirtyCallback.accept(x, y);
+	}
+
+	public int mineCount() {
+		return totalMines;
+	}
+	
+	public int flagCount() {
+		return totalFlags;
+	}
+	
+	public void addPoints(int toAdd) {
+		this.totalPoints += toAdd;
+	}
+	
+	public int points() {
+		return totalPoints;
 	}
 }

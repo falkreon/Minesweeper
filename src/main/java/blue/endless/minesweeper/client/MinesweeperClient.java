@@ -1,5 +1,10 @@
 package blue.endless.minesweeper.client;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayDeque;
 import java.util.HashMap;
 import java.util.Map;
@@ -14,11 +19,13 @@ import com.playsawdust.glow.image.ImageData;
 import com.playsawdust.glow.image.ImagePainter;
 import com.playsawdust.glow.image.SrgbImageData;
 import com.playsawdust.glow.image.color.BlendMode;
+import com.playsawdust.glow.image.color.RGBColor;
 import com.playsawdust.glow.vecmath.Vector2d;
 
 import blue.endless.minesweeper.Identifier;
 import blue.endless.minesweeper.ImageSupplier;
 import blue.endless.minesweeper.Minesweeper;
+import blue.endless.minesweeper.Resources;
 import blue.endless.minesweeper.world.Area;
 import blue.endless.minesweeper.world.BaseAreaGenerator;
 import blue.endless.minesweeper.world.FreeEntity;
@@ -39,13 +46,28 @@ public class MinesweeperClient {
 	
 	private static Controls controls = new Controls();
 	
+	private static BitmapFont font = new BitmapFont();
+	
 	public void init() {
 		Thread.currentThread().setName("Render thread");
 		Window gameWindow = new Window("Minesweeper");
 		
 		gameWindow.setVisible(true);
 		
+		Resources.init();
+		images = new ImageSupplier();
+		
+		Minesweeper.LOGGER.info("Loading Unifont...");
+		try(InputStream unifont = Files.newInputStream(Path.of("unifont-15.1.05.hex"),StandardOpenOption.READ)) {
+			font.loadHex(unifont);
+		} catch (IOException ex) {
+			throw new RuntimeException(ex);
+		}
+		
+		Minesweeper.LOGGER.info("Loaded.");
+		
 		mainArea = new Area();
+		mainArea.chooseRandomSeed();
 		
 		player.setPosition(new Vector2d(32*16, 32*16));
 		mainArea.addEntity(player);
@@ -56,38 +78,19 @@ public class MinesweeperClient {
 		mainArea.revealAndChain(32, 32, MinesweeperClient::markDirty);
 		Minesweeper.LOGGER.info("Map Complete.");
 		
-		images = new ImageSupplier();
-		
-		Minesweeper.LOGGER.info("Baking patches...");
-		bakeAll(images, mainArea);
-		Minesweeper.LOGGER.info("Complete.");
-		
-		//Minesweeper.LOGGER.info("Baking patch...");
-		//bakedPatch = bake(images, mainArea, 0, 0, 32, 32);
-		//Minesweeper.LOGGER.info("Complete.");
-		
 		gameWindow.onLeftMouseUp().register((x, y) -> {
 			int tileX = ((x + scrollx) / scale) / 16;
 			int tileY = ((y + scrolly) / scale) / 16;
 			//Minesweeper.LOGGER.info("Handling click at tile "+tileX+", "+tileY+"...");
-			mainArea.revealAndChain(tileX, tileY, MinesweeperClient::markDirty);
-			
-			//Minesweeper.LOGGER.info("Rebaking at tile "+tileX+", "+tileY+"...");
-			//rebake(images, mainArea, tileX, tileY);
-			//Minesweeper.LOGGER.info("Complete.");
+			int revealed = mainArea.revealAndChain(tileX, tileY, MinesweeperClient::markDirty);
+			mainArea.addPoints(revealed);
 		});
 		
 		gameWindow.onRightMouseUp().register((x, y) -> {
 			int tileX = ((x + scrollx) / scale) / 16;
 			int tileY = ((y + scrolly) / scale) / 16;
 			
-			mainArea.flag(tileX, tileY, !mainArea.isFlagged(tileX, tileY));
-			Minesweeper.LOGGER.info("Rebaking at tile "+tileX+", "+tileY+"...");
-			rebake(images, mainArea, tileX, tileY);
-			Minesweeper.LOGGER.info("Complete.");
-			
-			//bakedPatch.destroy();
-			//bakedPatch = bake(images, mainArea, 0, 0, 32, 32);
+			mainArea.flag(tileX, tileY, !mainArea.isFlagged(tileX, tileY), MinesweeperClient::markDirty);
 		});
 		
 		gameWindow.onKeyDown().register(controls::keyDown);
@@ -97,17 +100,6 @@ public class MinesweeperClient {
 		controls.get("right").bindKey(GLFW.GLFW_KEY_D);
 		controls.get("up").bindKey(GLFW.GLFW_KEY_W);
 		controls.get("down").bindKey(GLFW.GLFW_KEY_S);
-		/*
-		try {
-			tileset = PngImageIO.load(
-				DataSlice.of(Files.readAllBytes(Path.of("tiles.png")))
-				);
-		} catch (IOException e) {
-			e.printStackTrace();
-			tileset = new SrgbImageData(16, 16);
-		}*/
-		
-		//texture = new Texture(tileset);
 		
 		Timing timing = new Timing()
 			.setFrameCallback((t) -> { frame(t, gameWindow); })
@@ -150,7 +142,7 @@ public class MinesweeperClient {
 		Texture t = bakedTiles.remove(pos);
 		if (t != null) t.destroy();
 		
-		Minesweeper.LOGGER.info("Putting offset: "+(tx*32)+", "+(ty*32)+" pos: "+pos);
+		//Minesweeper.LOGGER.info("Putting offset: "+(tx*32)+", "+(ty*32)+" pos: "+pos);
 		
 		bakedTiles.put(pos, bake(images, area, tx * 32, ty * 32, 32, 32));
 	}
@@ -163,24 +155,24 @@ public class MinesweeperClient {
 	}
 	
 	public static Texture bake(ImageSupplier images, Area area, int xofs, int yofs, int width, int height) {
-		Minesweeper.LOGGER.info("Baking at offset "+xofs+", "+yofs);
+		//Minesweeper.LOGGER.info("Baking at offset "+xofs+", "+yofs);
 		SrgbImageData data = new SrgbImageData(width * 16, height * 16);
 		ImagePainter painter = new ImagePainter(data, BlendMode.NORMAL);
 		
 		//ImageData emptyBg = images.getImage(Identifier.of("ms:tiles.png:13"));
-		ImageData num0 = images.getImage(Identifier.of("ms:tiles.png:10"));
-		ImageData num1 = images.getImage(Identifier.of("ms:tiles.png:2"));
-		ImageData num2 = images.getImage(Identifier.of("ms:tiles.png:3"));
-		ImageData num3 = images.getImage(Identifier.of("ms:tiles.png:4"));
-		ImageData num4 = images.getImage(Identifier.of("ms:tiles.png:5"));
-		ImageData num5 = images.getImage(Identifier.of("ms:tiles.png:6"));
-		ImageData num6 = images.getImage(Identifier.of("ms:tiles.png:7"));
-		ImageData num7 = images.getImage(Identifier.of("ms:tiles.png:8"));
-		ImageData num8 = images.getImage(Identifier.of("ms:tiles.png:9"));
+		ImageData num0 = images.getImage(Identifier.of("ms:textures/tiles.png:10"));
+		ImageData num1 = images.getImage(Identifier.of("ms:textures/tiles.png:2"));
+		ImageData num2 = images.getImage(Identifier.of("ms:textures/tiles.png:3"));
+		ImageData num3 = images.getImage(Identifier.of("ms:textures/tiles.png:4"));
+		ImageData num4 = images.getImage(Identifier.of("ms:textures/tiles.png:5"));
+		ImageData num5 = images.getImage(Identifier.of("ms:textures/tiles.png:6"));
+		ImageData num6 = images.getImage(Identifier.of("ms:textures/tiles.png:7"));
+		ImageData num7 = images.getImage(Identifier.of("ms:textures/tiles.png:8"));
+		ImageData num8 = images.getImage(Identifier.of("ms:textures/tiles.png:9"));
 		
-		ImageData fg = images.getImage(Identifier.of("ms:tiles.png:0"));
+		ImageData fg = images.getImage(Identifier.of("ms:textures/tiles.png:0"));
 		
-		ImageData flag = images.getImage(Identifier.of("ms:tiles.png:1"));
+		ImageData flag = images.getImage(Identifier.of("ms:textures/tiles.png:1"));
 		
 		for(int y=0; y<height; y++) {
 			for(int x=0; x<width; x++) {
@@ -239,7 +231,7 @@ public class MinesweeperClient {
 		int tilesWide = mainArea.getWidth() / 32;
 		int tilesHigh = mainArea.getHeight() / 32;
 		
-		ImageData image = images.getImage(Identifier.of("ms:player.png")); //TODO: Texture supplier to sit alongside the image supplier
+		ImageData image = images.getImage(Identifier.of("ms:textures/player.png")); //TODO: Texture supplier to sit alongside the image supplier
 		
 		double t = timing.getPartialTick();
 		if (t>1D) t=1D; if (t<0D) t=0D;
@@ -256,13 +248,22 @@ public class MinesweeperClient {
 		int playerY = (int) Math.round(vec.y());
 		scrollx = (playerX * scale) - halfWidth; //Center of character is at the center of its sprite
 		scrolly = ((playerY - (image.getHeight() / 2)) * scale) - halfHeight; //Center of character is halfway up the sprite from the entity location.
-		//System.out.println("L: "+player.lastPosition()+" N: "+player.position()+" I: "+vec+" S: "+scrollx+", "+scrolly+" T:"+t);
 		
-		for(int y=0; y<tilesHigh; y++) {
-			for(int x=0; x<tilesWide; x++) {
+		int playerTileX = playerX / 16 / 32;
+		int playerTileY = playerY / 16 / 32;
+		
+		for (int y=playerTileY-2; y<=playerTileY+2; y++) {
+			for(int x=playerTileX-2; x<=playerTileX+2; x++) {
+				
 				Texture tile = bakedTiles.get(new Vector2i(x, y));
 				if (tile != null) {
 					g.drawImage(tile, (x * 16 * 32 * scale) - scrollx, (y * 16 * 32 * scale) - scrolly, tile.getWidth() * scale, tile.getHeight() * scale, 0, 0, tile.getWidth(), tile.getHeight(), 1.0f);
+				} else {
+					if (x<0 || y<0 || x>=tilesWide || y>=tilesHigh) {
+						continue;
+					} else {
+						markDirty(x*32, y*32);
+					}
 				}
 			}
 		}
@@ -274,6 +275,8 @@ public class MinesweeperClient {
 			
 			g.drawImage(image, (int) Math.round(screenPosition.x()) - halfImageWidth, (int) Math.round(screenPosition.y()) - (image.getHeight() * scale), image.getWidth() * scale, image.getHeight() * scale, 0, 0, image.getWidth(), image.getHeight(), 1.0f);
 		}
+		
+		font.drawShadowString(g, 12, 12, "Bombs: " + mainArea.mineCount() + " Flags: "+mainArea.flagCount()+" Points: "+mainArea.points(), RGBColor.fromGamma(1, 1, 1, 0.5f), 3);
 		
 		gameWindow.swapBuffers();
 	}
