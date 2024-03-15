@@ -3,6 +3,9 @@ package blue.endless.minesweeper.world;
 import java.util.HashMap;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.function.BiConsumer;
+
+import blue.endless.minesweeper.world.te.TileEntity;
 
 /**
  * This is a segment of an Area, usually 1024 x 1024.
@@ -91,5 +94,9 @@ public class Patch {
 			it -> topTileEntities.put(pos, it),
 			() -> topTileEntities.remove(pos)
 		);
+	}
+	
+	public void forEachTopTileEntity(BiConsumer<Vector2i, TileEntity> consumer) {
+		topTileEntities.forEach(consumer);
 	}
 }

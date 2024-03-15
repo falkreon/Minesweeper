@@ -7,6 +7,7 @@ import java.util.random.RandomGeneratorFactory;
 
 import blue.endless.minesweeper.Minesweeper;
 import blue.endless.minesweeper.world.te.BombTileEntity;
+import blue.endless.minesweeper.world.te.TileEntity;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import it.unimi.dsi.fastutil.ints.IntList;
 
@@ -42,8 +43,8 @@ public class BaseAreaGenerator implements AreaGenerator {
 		RandomGenerator generator = getPatchRandom(xofs, yofs, BOMB_SEED);
 		int allocated = 0;
 		
-		int mx = patch.width() / 2; mx = 32;
-		int my = patch.height() / 2; my = 32;
+		int mx = patch.width() / 2; //mx = 32;
+		int my = patch.height() / 2; //my = 32;
 		
 		final int originalBombCount = bombCount;
 		

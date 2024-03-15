@@ -6,11 +6,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayDeque;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.Optional;
 
 import org.lwjgl.glfw.GLFW;
 
+import com.playsawdust.glow.Cache;
 import com.playsawdust.glow.Timing;
 import com.playsawdust.glow.gl.Texture;
 import com.playsawdust.glow.gl.Window;
@@ -30,6 +30,8 @@ import blue.endless.minesweeper.world.Area;
 import blue.endless.minesweeper.world.BaseAreaGenerator;
 import blue.endless.minesweeper.world.FreeEntity;
 import blue.endless.minesweeper.world.Vector2i;
+import blue.endless.minesweeper.world.te.FlagTileEntity;
+import blue.endless.minesweeper.world.te.TileEntity;
 
 public class MinesweeperClient {
 	private static Area mainArea = null;
@@ -38,7 +40,9 @@ public class MinesweeperClient {
 	private static int scrollx = 0;
 	private static int scrolly = 0;
 	
-	private static Map<Vector2i, Texture> bakedTiles = new HashMap<>(); //TODO: Replace with LRU cache?
+	private static final int BAKE_SIZE = 32;
+	
+	private static Cache<Vector2i, Texture> bakedTiles = new Cache<>(300);
 	private static ArrayDeque<Vector2i> dirtyTiles = new ArrayDeque<>();
 	private static FreeEntity player = new FreeEntity();
 	
@@ -47,6 +51,8 @@ public class MinesweeperClient {
 	private static Controls controls = new Controls();
 	
 	private static BitmapFont font = new BitmapFont();
+	
+	private static int inferenceLevel = 1;
 	
 	public void init() {
 		Thread.currentThread().setName("Render thread");
@@ -69,13 +75,13 @@ public class MinesweeperClient {
 		mainArea = new Area();
 		mainArea.chooseRandomSeed();
 		
-		player.setPosition(new Vector2d(32*16, 32*16));
+		player.setPosition(new Vector2d((mainArea.getWidth()/2)*16, (mainArea.getHeight()/2)*16));
 		mainArea.addEntity(player);
 		
 		mainArea.setGenerator(new BaseAreaGenerator());
 		mainArea.generate(); //FIXME: This is temporary! In reality we will generate a patch at a time!
 		Minesweeper.LOGGER.info("Doing initial reveal...");
-		mainArea.revealAndChain(32, 32, MinesweeperClient::markDirty);
+		mainArea.revealAndChain(mainArea.getWidth() / 2, mainArea.getHeight() / 2, MinesweeperClient::markDirty);
 		Minesweeper.LOGGER.info("Map Complete.");
 		
 		gameWindow.onLeftMouseUp().register((x, y) -> {
@@ -120,12 +126,12 @@ public class MinesweeperClient {
 	}
 	
 	public void bakeAll(ImageSupplier images, Area area) {
-		int tilesWide = area.getWidth() / 32;
-		int tilesHigh = area.getHeight() / 32;
+		int tilesWide = area.getWidth() / BAKE_SIZE;
+		int tilesHigh = area.getHeight() / BAKE_SIZE;
 		
 		for(int y=0; y<tilesHigh; y++) {
 			for(int x=0; x<tilesWide; x++) {
-				Texture t = bake(images, area, x*32, y*32, 32, 32);
+				Texture t = bake(images, area, x*BAKE_SIZE, y*BAKE_SIZE, BAKE_SIZE, BAKE_SIZE);
 				
 				bakedTiles.put(new Vector2i(x, y), t);
 			}
@@ -135,8 +141,8 @@ public class MinesweeperClient {
 	public void rebake(ImageSupplier images, Area area, int x, int y) {
 		if (x<0 || y<0 || x>=area.getWidth() || y>=area.getHeight()) return;
 		
-		int tx = x / 32;
-		int ty = y / 32;
+		int tx = x / BAKE_SIZE;
+		int ty = y / BAKE_SIZE;
 		Vector2i pos = new Vector2i(tx, ty);
 		
 		Texture t = bakedTiles.remove(pos);
@@ -144,14 +150,14 @@ public class MinesweeperClient {
 		
 		//Minesweeper.LOGGER.info("Putting offset: "+(tx*32)+", "+(ty*32)+" pos: "+pos);
 		
-		bakedTiles.put(pos, bake(images, area, tx * 32, ty * 32, 32, 32));
+		bakedTiles.put(pos, bake(images, area, tx * BAKE_SIZE, ty * BAKE_SIZE, BAKE_SIZE, BAKE_SIZE));
 	}
 	
 	public static void rebakeTile(ImageSupplier images, Area area, Vector2i tilePos) {
 		Texture t = bakedTiles.remove(tilePos);
 		if (t != null) t.destroy();
 		
-		bakedTiles.put(tilePos, bake(images, area, tilePos.x() * 32, tilePos.y() * 32, 32, 32));
+		bakedTiles.put(tilePos, bake(images, area, tilePos.x() * BAKE_SIZE, tilePos.y() * BAKE_SIZE, BAKE_SIZE, BAKE_SIZE));
 	}
 	
 	public static Texture bake(ImageSupplier images, Area area, int xofs, int yofs, int width, int height) {
@@ -160,6 +166,7 @@ public class MinesweeperClient {
 		ImagePainter painter = new ImagePainter(data, BlendMode.NORMAL);
 		
 		//ImageData emptyBg = images.getImage(Identifier.of("ms:tiles.png:13"));
+		ImageData coin = images.getImage(Identifier.of("ms:textures/tiles.png:11")); //Temp
 		ImageData num0 = images.getImage(Identifier.of("ms:textures/tiles.png:10"));
 		ImageData num1 = images.getImage(Identifier.of("ms:textures/tiles.png:2"));
 		ImageData num2 = images.getImage(Identifier.of("ms:textures/tiles.png:3"));
@@ -189,10 +196,18 @@ public class MinesweeperClient {
 				
 				int mineCount = area.adjacentMineCount(x + xofs, y + yofs);
 				
-				painter.drawImage(num0, x * 16, y * 16);
+				Identifier id = Identifier.of(area.getBackgroundTile(x, y).data().getPrimitive("texture").asString().orElse("ms:textures/missing.png"));
+				ImageData tileTexture = images.getImage(id);
+				painter.drawImage(tileTexture, x * 16, y * 16);
 				
-				if (area.getTileEntity(x + xofs, y + yofs).isPresent()) {
-					painter.drawImage(flag, x * 16, y * 16);
+				Optional<TileEntity> te = area.getTileEntity(x + xofs, y + yofs);
+				if (te.isPresent()) {
+					if (te.get() instanceof FlagTileEntity flagTE) {
+						painter.drawImage(flag, x * 16, y * 16); //TODO: Honor the json in the TE
+					} else {
+						//For now assume it's a score coin
+						painter.drawImage(coin, x * 16, y * 16);
+					}
 				} else {
 					if (mineCount > 0) {
 						ImageData numImage = switch(mineCount) {
@@ -220,6 +235,7 @@ public class MinesweeperClient {
 		//Before we process this frame, let's rebake tiles that need it
 		Vector2i dirty = dirtyTiles.pollFirst();
 		if (dirty != null) {
+			//System.out.println("Baking "+dirty);
 			rebakeTile(images, mainArea, dirty);
 		}
 		
@@ -228,8 +244,8 @@ public class MinesweeperClient {
 		
 		WindowPainter g = gameWindow.startDrawing();
 		
-		int tilesWide = mainArea.getWidth() / 32;
-		int tilesHigh = mainArea.getHeight() / 32;
+		int tilesWide = mainArea.getWidth() / BAKE_SIZE;
+		int tilesHigh = mainArea.getHeight() / BAKE_SIZE;
 		
 		ImageData image = images.getImage(Identifier.of("ms:textures/player.png")); //TODO: Texture supplier to sit alongside the image supplier
 		
@@ -249,20 +265,20 @@ public class MinesweeperClient {
 		scrollx = (playerX * scale) - halfWidth; //Center of character is at the center of its sprite
 		scrolly = ((playerY - (image.getHeight() / 2)) * scale) - halfHeight; //Center of character is halfway up the sprite from the entity location.
 		
-		int playerTileX = playerX / 16 / 32;
-		int playerTileY = playerY / 16 / 32;
+		int playerTileX = playerX / 16 / BAKE_SIZE;
+		int playerTileY = playerY / 16 / BAKE_SIZE;
 		
 		for (int y=playerTileY-2; y<=playerTileY+2; y++) {
 			for(int x=playerTileX-2; x<=playerTileX+2; x++) {
 				
 				Texture tile = bakedTiles.get(new Vector2i(x, y));
 				if (tile != null) {
-					g.drawImage(tile, (x * 16 * 32 * scale) - scrollx, (y * 16 * 32 * scale) - scrolly, tile.getWidth() * scale, tile.getHeight() * scale, 0, 0, tile.getWidth(), tile.getHeight(), 1.0f);
+					g.drawImage(tile, (x * 16 * BAKE_SIZE * scale) - scrollx, (y * 16 * BAKE_SIZE * scale) - scrolly, tile.getWidth() * scale, tile.getHeight() * scale, 0, 0, tile.getWidth(), tile.getHeight(), 1.0f);
 				} else {
 					if (x<0 || y<0 || x>=tilesWide || y>=tilesHigh) {
 						continue;
 					} else {
-						markDirty(x*32, y*32);
+						markDirty(x*BAKE_SIZE, y*BAKE_SIZE);
 					}
 				}
 			}
@@ -276,7 +292,13 @@ public class MinesweeperClient {
 			g.drawImage(image, (int) Math.round(screenPosition.x()) - halfImageWidth, (int) Math.round(screenPosition.y()) - (image.getHeight() * scale), image.getWidth() * scale, image.getHeight() * scale, 0, 0, image.getWidth(), image.getHeight(), 1.0f);
 		}
 		
-		font.drawShadowString(g, 12, 12, "Bombs: " + mainArea.mineCount() + " Flags: "+mainArea.flagCount()+" Points: "+mainArea.points(), RGBColor.fromGamma(1, 1, 1, 0.5f), 3);
+		if (!mainArea.isClear()) {
+			font.drawShadowString(g, 12, 12, "Bombs: " + mainArea.mineCount() + " Flags: "+mainArea.flagCount()+" Points: "+mainArea.points()+" Wrong: "+mainArea.wrongFlags(), RGBColor.fromGamma(1, 1, 1, 0.5f), 3);
+		} else {
+			font.drawShadowString(g, 12, 12, "Clear!", RGBColor.fromGamma(1, 1, 1, 0.5f), 3);
+		}
+		
+		font.drawShadowString(g, 12, 20, "Tiles: "+bakedTiles.size(), RGBColor.fromGamma(1, 1, 1, 0.5f), 2);
 		
 		gameWindow.swapBuffers();
 	}

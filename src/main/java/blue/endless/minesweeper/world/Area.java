@@ -9,11 +9,14 @@ import java.util.List;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
+import java.util.function.BiConsumer;
 import java.util.function.Predicate;
 import java.util.random.RandomGenerator;
 import java.util.stream.Stream;
 
+import blue.endless.jankson.api.document.PrimitiveElement;
 import blue.endless.minesweeper.world.te.FlagTileEntity;
+import blue.endless.minesweeper.world.te.TileEntity;
 import blue.endless.tinyevents.function.IntBiConsumer;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 
@@ -32,8 +35,10 @@ public class Area {
 	
 	List<FreeEntity> entities = new ArrayList<>();
 	
+	private boolean isClear = false;
 	private int totalMines = 0;
 	private int totalFlags = 0;
+	private int wrongFlags = 0;
 	private int totalPoints = 0; //TODO: Move this to a per-player object
 	
 	/**
@@ -43,7 +48,7 @@ public class Area {
 	
 	public Area() {
 		//patchSize = 1024;
-		patchSize = 128;
+		patchSize = 64;
 		patchesWide = 1;
 		patchesHigh = 1;
 		
@@ -51,7 +56,9 @@ public class Area {
 		
 		tileset.put(-1, missingTile);
 		tileset.put(0, baseBackgroundTile);
+		baseBackgroundTile.data().put("texture", PrimitiveElement.of("ms:textures/tiles.png:10"));
 		tileset.put(1, baseForegroundTile);
+		baseForegroundTile.data().put("texture", PrimitiveElement.of("ms:textures/tiles.png:0"));
 		
 		patch = new Patch(patchSize, patchSize);
 	}
@@ -130,7 +137,7 @@ public class Area {
 		for(int dy=-1; dy<=1; dy++) {
 			for(int dx=-1; dx<=1; dx++) {
 				if (dx==0 && dy==0) continue;
-				if (getTileEntity(x + dx, y + dy).isPresent()) {
+				if (getTileEntity(x + dx, y + dy).filter(TileEntity::isBomb).isPresent()) {
 					result++;
 				}
 			}
@@ -247,23 +254,68 @@ public class Area {
 		return patch.isFlagged(x, y);
 	}
 	
+	public boolean isBomb(int x, int y) {
+		return patch.tileEntityAt(x, y).map(TileEntity::isBomb).orElse(false);
+	}
+	
 	public void flag(int x, int y, boolean flag, IntBiConsumer markDirtyCallback) {
 		if (patch.foreground(x, y).isEmpty()) return; //Can't flag empty tiles
 		
+		if (isClear) return;
+		
 		if (flag) {
 			if (!patch.isFlagged(x, y)) {
+				if (!isBomb(x, y)) wrongFlags++;
+				
 				patch.setFlag(new Vector2i(x, y), Optional.of(new FlagTileEntity())); // TODO: Record our flag image
 				this.totalFlags++;
 			}
 		} else {
 			if (patch.isFlagged(x, y)) {
+				if (!isBomb(x, y)) wrongFlags--;
+				
 				patch.setFlag(new Vector2i(x, y), Optional.empty());
 				this.totalFlags--;
 			}
+		}
+		
+		if (totalMines == totalFlags && wrongFlags == 0) {
+			isClear = true;
+			//TODO: Remove all flags, replace all bombs with collectables, and probably mark everything dirty.
 			
+			//System.out.println("Game is complete. Doing swaps...");
+			
+			record FlagSwap(Vector2i pos, FlagTileEntity flag) {};
+			ArrayList<FlagSwap> swaps = new ArrayList<>();
+			
+			forEachFlag((pos, f) -> {
+				swaps.add(new FlagSwap(pos, f));
+			});
+			
+			for(FlagSwap swap : swaps) {
+				//TODO: Maybe reward flag's owner?
+				patch.setFlag(swap.pos(), Optional.empty());
+				patch.setTileEntity(swap.pos(), Optional.of(new TileEntity())); // TODO: Replace with points entity
+				patch.clearForeground(swap.pos().x(), swap.pos().y());
+				//System.out.println("Marking "+swap.pos()+" dirty...");
+				markDirtyCallback.accept(swap.pos().x(), swap.pos().y());
+			}
+			
+			//System.out.println("Swaps complete.");
 		}
 		
 		markDirtyCallback.accept(x, y);
+	}
+	
+	public void forEachFlag(BiConsumer<Vector2i, FlagTileEntity> consumer) {
+		//for each patch
+		int xofs = 0;
+		int yofs = 0;
+		patch.forEachTopTileEntity((pos, te) -> {
+			if (te instanceof FlagTileEntity flag) {
+				consumer.accept(pos.add(xofs, yofs), flag);
+			}
+		});
 	}
 
 	public int mineCount() {
@@ -280,5 +332,13 @@ public class Area {
 	
 	public int points() {
 		return totalPoints;
+	}
+
+	public int wrongFlags() {
+		return wrongFlags;
+	}
+	
+	public boolean isClear() {
+		return isClear;
 	}
 }
