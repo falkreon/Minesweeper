@@ -6,6 +6,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Optional;
 
 import org.lwjgl.glfw.GLFW;
@@ -88,15 +89,63 @@ public class MinesweeperClient {
 			int tileX = ((x + scrollx) / scale) / 16;
 			int tileY = ((y + scrolly) / scale) / 16;
 			//Minesweeper.LOGGER.info("Handling click at tile "+tileX+", "+tileY+"...");
-			int revealed = mainArea.revealAndChain(tileX, tileY, MinesweeperClient::markDirty);
-			mainArea.addPoints(revealed);
+			
+			Optional<TileEntity> ote = mainArea.getTileEntity(tileX, tileY);
+			
+			if (ote.isPresent()) {
+				TileEntity te = ote.get();
+				
+				if (te.isBomb()) {
+					mainArea.revealSimple(tileX, tileY);
+					markDirty(tileX, tileY);
+					
+					mainArea.addPoints(-mainArea.points());
+					player.setPosition(new Vector2d((mainArea.getWidth()/2)*16, (mainArea.getHeight()/2)*16));
+					
+					//TODO: Animate this
+				}
+				
+			} else {
+				int revealed = mainArea.revealAndChain(tileX, tileY, MinesweeperClient::markDirty);
+				mainArea.addPoints(revealed);
+			}
+			
 		});
 		
 		gameWindow.onRightMouseUp().register((x, y) -> {
 			int tileX = ((x + scrollx) / scale) / 16;
 			int tileY = ((y + scrolly) / scale) / 16;
 			
-			mainArea.flag(tileX, tileY, !mainArea.isFlagged(tileX, tileY), MinesweeperClient::markDirty);
+			if (mainArea.getForegroundTile(tileX, tileY).isPresent()) {
+				mainArea.flag(tileX, tileY, !mainArea.isFlagged(tileX, tileY), MinesweeperClient::markDirty);
+			} else {
+				
+				int adjacent = mainArea.adjacentMineCount(tileX, tileY);
+				
+				switch(adjacent) {
+					case 1 -> {
+						if (inferenceLevel < 1) break; // Flagging an *adjacent* square by right-clicking a 1 requires inference-level 1
+						
+						ArrayList<Vector2i> candidates = new ArrayList<>();
+						
+						for(int yi=-1; yi<=1; yi++) {
+							for(int xi=-1; xi<=1; xi++) {
+								if (xi==0 && yi==0) continue;
+								if (mainArea.getForegroundTile(tileX + xi, tileY + yi).isPresent()) {
+									candidates.add(new Vector2i(tileX + xi, tileY + yi));
+								}
+							}
+						}
+						
+						if (candidates.size() == 1) {
+							Vector2i vec = candidates.get(0);
+							mainArea.flag(vec.x(), vec.y(), true, MinesweeperClient::markDirty);
+						}
+					}
+				}
+			}
+			
+			
 		});
 		
 		gameWindow.onKeyDown().register(controls::keyDown);
@@ -167,6 +216,7 @@ public class MinesweeperClient {
 		
 		//ImageData emptyBg = images.getImage(Identifier.of("ms:tiles.png:13"));
 		ImageData coin = images.getImage(Identifier.of("ms:textures/tiles.png:11")); //Temp
+		ImageData bomb = images.getImage(Identifier.of("ms:textures/tiles.png:12")); //Temp
 		ImageData num0 = images.getImage(Identifier.of("ms:textures/tiles.png:10"));
 		ImageData num1 = images.getImage(Identifier.of("ms:textures/tiles.png:2"));
 		ImageData num2 = images.getImage(Identifier.of("ms:textures/tiles.png:3"));
@@ -206,7 +256,11 @@ public class MinesweeperClient {
 						painter.drawImage(flag, x * 16, y * 16); //TODO: Honor the json in the TE
 					} else {
 						//For now assume it's a score coin
-						painter.drawImage(coin, x * 16, y * 16);
+						if (te.get().isBomb()) {
+							painter.drawImage(bomb, x * 16, y * 16);
+						} else {
+							painter.drawImage(coin, x * 16, y * 16);
+						}
 					}
 				} else {
 					if (mineCount > 0) {

@@ -13,6 +13,7 @@ import java.util.function.Consumer;
 
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
+import net.fabricmc.loader.api.metadata.ModDependency;
 
 public class Resources {
 	private static List<Node> nodes = new ArrayList<>();
@@ -41,6 +42,7 @@ public class Resources {
 		Minesweeper.LOGGER.info("Resolved Mods: "+resolved);
 		
 		nodes.addAll(resolved);
+		nodes.addAll(unresolved); // Add them to the list anyway
 	}
 	
 	private static boolean resolveOne(List<Node> unresolved, ArrayDeque<Node> resolved, Set<String> resolvedIds) {
@@ -171,7 +173,9 @@ public class Resources {
 		
 		public Node(ModContainer container) {
 			this.container = container;
-			dependencies = Set.copyOf(container.getMetadata().getDependencies().stream().map(it -> it.getModId()).toList());
+			dependencies = Set.copyOf(container.getMetadata().getDependencies().stream()
+					.filter(it -> it.getKind()==ModDependency.Kind.DEPENDS)
+					.map(it -> it.getModId()).toList());
 			rootPaths.addAll(container.getRootPaths());
 		}
 		
