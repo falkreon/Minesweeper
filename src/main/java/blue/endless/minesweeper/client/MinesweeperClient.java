@@ -347,12 +347,12 @@ public class MinesweeperClient {
 		}
 		
 		if (!mainArea.isClear()) {
-			font.drawShadowString(g, 12, 12, "Bombs: " + mainArea.mineCount() + " Flags: "+mainArea.flagCount()+" Points: "+mainArea.points()+" Wrong: "+mainArea.wrongFlags(), RGBColor.fromGamma(1, 1, 1, 0.5f), 3);
+			font.drawShadowString(g, 12, 12, "Bombs: " + mainArea.mineCount() + " Flags: "+mainArea.flagCount()+" Points: "+mainArea.points(), RGBColor.fromGamma(1, 1, 1, 0.5f), 3);
 		} else {
 			font.drawShadowString(g, 12, 12, "Clear!", RGBColor.fromGamma(1, 1, 1, 0.5f), 3);
 		}
 		
-		font.drawShadowString(g, 12, 20, "Tiles: "+bakedTiles.size(), RGBColor.fromGamma(1, 1, 1, 0.5f), 2);
+		//font.drawShadowString(g, 12, 20, "Tiles: "+bakedTiles.size(), RGBColor.fromGamma(1, 1, 1, 0.5f), 2);
 		
 		gameWindow.swapBuffers();
 	}

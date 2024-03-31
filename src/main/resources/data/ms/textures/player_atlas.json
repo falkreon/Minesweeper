@@ -1,0 +1,27 @@
+{
+	"atlas": {
+		/* This atlas is split into tiles all the same size - 16 x 32.
+		 * Then we tag some important locations with 
+		 */
+		
+		"mode": "uniform",
+		"width": 16,
+		"height": 32,
+		"aliases": {
+			"0": "stand_s0",   // You can refer to wrap-around tile indices, or
+			"0,1": "stand_n0", // tile coordinates
+			"0,2": "stand_e0",
+			"0,3": "stand_w0"
+		}
+	},
+	"animation": {
+		"walk": {
+			"timing": 20, //either a fixed msec number or an array of msec frame lengths
+			"west": ["stand_w0"],
+			"east": ["stand_e0"],
+			"north": ["stand_n0"],
+			"south": ["stand_s0"]
+			
+		}
+	}
+}

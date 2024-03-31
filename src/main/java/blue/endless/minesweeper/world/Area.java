@@ -47,8 +47,8 @@ public class Area {
 	private Patch patch;
 	
 	public Area() {
-		//patchSize = 1024;
-		patchSize = 64;
+		patchSize = 1024;
+		//patchSize = 2048;
 		patchesWide = 1;
 		patchesHigh = 1;
 		
