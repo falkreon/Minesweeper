@@ -3,7 +3,6 @@ package blue.endless.minesweeper.client;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -27,12 +26,17 @@ import blue.endless.minesweeper.Identifier;
 import blue.endless.minesweeper.ImageSupplier;
 import blue.endless.minesweeper.Minesweeper;
 import blue.endless.minesweeper.Resources;
+import blue.endless.minesweeper.Resources.Resource;
 import blue.endless.minesweeper.world.Area;
 import blue.endless.minesweeper.world.BaseAreaGenerator;
 import blue.endless.minesweeper.world.FreeEntity;
 import blue.endless.minesweeper.world.Vector2i;
 import blue.endless.minesweeper.world.te.FlagTileEntity;
 import blue.endless.minesweeper.world.te.TileEntity;
+import net.fabricmc.api.ModInitializer;
+import net.fabricmc.loader.api.FabricLoader;
+import net.fabricmc.loader.api.ModContainer;
+import net.fabricmc.loader.api.entrypoint.EntrypointContainer;
 
 public class MinesweeperClient {
 	private static Area mainArea = null;
@@ -65,7 +69,11 @@ public class MinesweeperClient {
 		images = new ImageSupplier();
 		
 		Minesweeper.LOGGER.info("Loading Unifont...");
-		try(InputStream unifont = Files.newInputStream(Path.of("unifont-15.1.05.hex"),StandardOpenOption.READ)) {
+		Optional<Resource> fontResource = Resources.get(Identifier.of("ms:unifont.hex")).stream().findFirst();
+		if (fontResource.isEmpty()) throw new RuntimeException("Unifont not found.");
+		try(InputStream unifont = Files.newInputStream(fontResource.get().path(), StandardOpenOption.READ)) {
+		
+		//try(InputStream unifont = Files.newInputStream(Path.of("unifont-15.1.05.hex"),StandardOpenOption.READ)) {
 			font.loadHex(unifont);
 		} catch (IOException ex) {
 			throw new RuntimeException(ex);
@@ -160,6 +168,10 @@ public class MinesweeperClient {
 			.setFrameCallback((t) -> { frame(t, gameWindow); })
 			.setTickCallback(MinesweeperClient::tick)
 			.setNonFrameCallback(gameWindow::poll);
+		
+		for(EntrypointContainer<ModInitializer> container : FabricLoader.getInstance().getEntrypointContainers("main", ModInitializer.class)) {
+			container.getEntrypoint().onInitialize();
+		}
 		
 		while(!gameWindow.shouldClose()) {
 			timing.runCycle();

@@ -45,6 +45,10 @@ public class Resources {
 		nodes.addAll(unresolved); // Add them to the list anyway
 	}
 	
+	public List<Node> getOrderedMods() {
+		return List.copyOf(nodes);
+	}
+	
 	private static boolean resolveOne(List<Node> unresolved, ArrayDeque<Node> resolved, Set<String> resolvedIds) {
 		for(Node n : unresolved) {
 			if (resolve(n, resolved, resolvedIds)) {
@@ -91,13 +95,13 @@ public class Resources {
 		return result;
 	}
 	
-	private static void get(Path p, Identifier basePath, List<Resource> results) {
+	//private static void get(Path p, Identifier basePath, List<Resource> results) {
 		
-	}
+	//}
 	
-	private static void find(Path p, Identifier basePath, List<Resource> results, boolean recursive) {
+	//private static void find(Path p, Identifier basePath, List<Resource> results, boolean recursive) {
 		
-	}
+	//}
 	
 	/**
 	 * Performs a depth-first search of all directories visible from base, including base, and returns a list of Paths
@@ -164,7 +168,6 @@ public class Resources {
 			pathConsumer.accept(base);
 		}
 	}
-	
 	
 	private static class Node {
 		private final ModContainer container;
